@@ -7,7 +7,7 @@
 #define MAX_ARGS 10
 
 int get_input(char *args[], char *buf, size_t buf_size);
-char *get_path(char *command, size_t command_len);
+char *get_path(char *command);
 
 int main(void) {
     // Flush after every printf
@@ -36,13 +36,23 @@ int main(void) {
                 printf("%s ", tokens[i]);
             putchar('\n');
         } else if (strcmp(tokens[0], "type") == 0) {
+            if (!tokens[1])
+                continue;
+
             if (strcmp(tokens[1], "type") == 0 ||
                 strcmp(tokens[1], "exit") == 0 ||
                 strcmp(tokens[1], "echo") == 0) {
                 printf("%s is a shell builtin\n", tokens[1]);
                 continue;
             } else {
-                printf("%s: not found\n", tokens[1]);
+                char *full_path = get_path(tokens[1]);
+
+                if (full_path) {
+                    printf("%s is %s\n", tokens[1], full_path);
+                    free(full_path);
+                } else {
+                    printf("%s: not found\n", tokens[1]);
+                }
             }
 
         } else {
@@ -79,4 +89,39 @@ int get_input(char *args[], char *buf, size_t buf_size) {
     args[argc] = NULL;
 
     return argc;
+}
+
+char *get_path(char *command) {
+    char *full_path = NULL;
+
+    char *path_val = getenv("PATH");
+    if (!path_val)
+        return NULL;
+
+    path_val = strdup(path_val);
+    if (!path_val)
+        return NULL;
+
+    char *dir = strtok(path_val, ":");
+    while (dir) {
+        size_t full_len = strlen(command) + strlen(dir) + 2;
+        char *candidate = malloc(full_len);
+        if (!candidate) {
+            free(path_val);
+            return NULL;
+        }
+
+        snprintf(candidate, full_len, "%s/%s", dir, command);
+
+        if (access(candidate, X_OK) == 0) {
+            full_path = candidate;
+            break;
+        }
+
+        free(candidate);
+        dir = strtok(NULL, ":");
+    }
+
+    free(path_val);
+    return full_path;
 }
