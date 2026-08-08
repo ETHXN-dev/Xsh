@@ -80,7 +80,7 @@ int get_input(char *args[], char *buf, size_t buf_size) {
     /* tokenize the input to become arguments */
     int argc = 0;
     char *token = strtok(buf, " ");
-    while (token != NULL) {
+    while (token != NULL && argc < MAX_ARGS - 1) {
         args[argc] = token;
         token = strtok(NULL, " ");
         argc++;
