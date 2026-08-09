@@ -43,7 +43,8 @@ int main(void) {
 
             if (strcmp(arguments[1], "type") == 0 ||
                 strcmp(arguments[1], "exit") == 0 ||
-                strcmp(arguments[1], "echo") == 0) {
+                strcmp(arguments[1], "echo") == 0 ||
+                strcmp(arguments[1], "pwd") == 0) {
                 printf("%s is a shell builtin\n", arguments[1]);
                 continue;
             } else {
@@ -55,6 +56,16 @@ int main(void) {
                 } else {
                     printf("%s: not found\n", arguments[1]);
                 }
+            }
+
+        } else if (strcmp(arguments[0], "pwd") == 0) {
+            char *dir = getcwd(NULL, 0);
+            if (dir != NULL) {
+                printf("%s\n", dir);
+                free(dir);
+            } else {
+                perror("getcwd");
+                exit(EXIT_FAILURE);
             }
 
         } else {
