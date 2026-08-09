@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define MAX_ARGS 10
 
 int get_input(char *args[], char *buf, size_t buf_size);
 char *get_path(char *command);
+void run_external_program(char *argv[]);
 
 int main(void) {
     // Flush after every printf
@@ -18,45 +20,45 @@ int main(void) {
     while (1) {
         printf("$ ");
 
-        char *tokens[MAX_ARGS];
-        int token_count = get_input(tokens, inputs, sizeof(inputs));
+        char *arguments[MAX_ARGS];
+        int arg_count = get_input(arguments, inputs, sizeof(inputs));
 
-        if (token_count < 0) {
+        if (arg_count < 0) {
             putchar('\n');
             break; // Any negative return code means stop execution
-        } else if (token_count == 0) {
+        } else if (arg_count == 0) {
             continue;
         }
 
-        if (strcmp(tokens[0], "exit") == 0) {
+        if (strcmp(arguments[0], "exit") == 0) {
             break;
-        } else if (strcmp(tokens[0], "echo") == 0) {
+        } else if (strcmp(arguments[0], "echo") == 0) {
             /* print the arguments entered after echo */
-            for (int i = 1; i < token_count; i++)
-                printf("%s ", tokens[i]);
+            for (int i = 1; i < arg_count; i++)
+                printf("%s ", arguments[i]);
             putchar('\n');
-        } else if (strcmp(tokens[0], "type") == 0) {
-            if (!tokens[1])
+        } else if (strcmp(arguments[0], "type") == 0) {
+            if (!arguments[1])
                 continue;
 
-            if (strcmp(tokens[1], "type") == 0 ||
-                strcmp(tokens[1], "exit") == 0 ||
-                strcmp(tokens[1], "echo") == 0) {
-                printf("%s is a shell builtin\n", tokens[1]);
+            if (strcmp(arguments[1], "type") == 0 ||
+                strcmp(arguments[1], "exit") == 0 ||
+                strcmp(arguments[1], "echo") == 0) {
+                printf("%s is a shell builtin\n", arguments[1]);
                 continue;
             } else {
-                char *full_path = get_path(tokens[1]);
+                char *full_path = get_path(arguments[1]);
 
                 if (full_path) {
-                    printf("%s is %s\n", tokens[1], full_path);
+                    printf("%s is %s\n", arguments[1], full_path);
                     free(full_path);
                 } else {
-                    printf("%s: not found\n", tokens[1]);
+                    printf("%s: not found\n", arguments[1]);
                 }
             }
 
         } else {
-            printf("%s: command not found\n", tokens[0]);
+            run_external_program(arguments);
         }
     }
 
@@ -124,4 +126,36 @@ char *get_path(char *command) {
 
     free(path_val);
     return full_path;
+}
+
+void run_external_program(char *argv[]) {
+    char *full_path = get_path(argv[0]);
+    if (full_path == NULL) {
+        fprintf(stderr, "%s: command not found\n", argv[0]);
+        return;
+    }
+
+    // fork the program to allow external programs to run
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        /* pid < 0 means fork() failed */
+        perror("fork");
+        free(full_path);
+        return;
+    } else if (pid == 0) {
+        /*  inside the child process,
+         * replace the child process with the external program */
+        execv(full_path, argv);
+        // execv only returns if there was a failure
+        perror("execv");
+        exit(127);
+    } else {
+        // inside the parent process
+        int status;
+        /* wait for the child process to finish running */
+        waitpid(pid, &status, 0);
+    }
+
+    free(full_path);
 }
