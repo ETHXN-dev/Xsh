@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +45,8 @@ int main(void) {
             if (strcmp(arguments[1], "type") == 0 ||
                 strcmp(arguments[1], "exit") == 0 ||
                 strcmp(arguments[1], "echo") == 0 ||
-                strcmp(arguments[1], "pwd") == 0) {
+                strcmp(arguments[1], "pwd") == 0 ||
+                strcmp(arguments[1], "cd") == 0) {
                 printf("%s is a shell builtin\n", arguments[1]);
                 continue;
             } else {
@@ -65,9 +67,10 @@ int main(void) {
                 free(dir);
             } else {
                 perror("getcwd");
-                exit(EXIT_FAILURE);
             }
-
+        } else if (strcmp(arguments[0], "cd") == 0) {
+            if (chdir(arguments[1]) == -1)
+                fprintf(stderr, "cd: %s: %s\n", arguments[1], strerror(errno));
         } else {
             run_external_program(arguments);
         }
