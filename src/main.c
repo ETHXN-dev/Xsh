@@ -75,11 +75,12 @@ int main(void) {
                 char *home = getenv("HOME");
                 if (home == NULL) {
                     fprintf(stderr, "HOME not set\n");
-                } else {
-                    chdir(home);
+                } else if (chdir(home) == -1) {
+                    fprintf(stderr, "cd: %s: %s\n", home, strerror(errno));
                 }
-            } else if (chdir(target) == -1)
-                fprintf(stderr, "cd: %s: %s\n", arguments[1], strerror(errno));
+            } else if (chdir(target) == -1) {
+                fprintf(stderr, "cd: %s: %s\n", target, strerror(errno));
+            }
         } else {
             run_external_program(arguments);
         }
