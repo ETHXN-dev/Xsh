@@ -8,7 +8,8 @@
 
 #define MAX_ARGS 10
 
-int get_input(char *args[], char *buf, size_t buf_size);
+int read_line(char *input, size_t input_size);
+int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 
@@ -22,7 +23,11 @@ int main(void) {
         printf("$ ");
 
         char *arguments[MAX_ARGS];
-        int arg_count = get_input(arguments, inputs, sizeof(inputs));
+        if (read_line(inputs, sizeof(inputs)) == -1) {
+            exit(EXIT_FAILURE);
+        }
+
+        int arg_count = tokenize(arguments, inputs);
 
         if (arg_count < 0) {
             putchar('\n');
@@ -89,20 +94,22 @@ int main(void) {
     return 0;
 }
 
-/* reads input from user into buf and tokenizes it into an array of strings
- * it returns the number of tokens read a value of -1 indicates error with
- * stdin or EOF reached
- */
-int get_input(char *args[], char *buf, size_t buf_size) {
-    if (fgets(buf, buf_size, stdin) == NULL) {
+int read_line(char *input, size_t input_size) {
+    if (fgets(input, input_size, stdin) == NULL) {
         if (ferror(stdin))
             perror("fgets failed");
         return -1;
     }
 
     /* remove the trailing newline */
-    buf[strcspn(buf, "\n")] = '\0';
+    input[strcspn(input, "\n")] = '\0';
+    return 0;
+}
 
+/* tokenizes input into an array of strings it returns the number of tokens read
+ * a value of -1 indicates error with stdin or EOF reached
+ */
+int tokenize(char *args[], char *buf) {
     /* tokenize the input to become arguments */
     int argc = 0;
     char *token = strtok(buf, " ");
