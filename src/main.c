@@ -69,7 +69,16 @@ int main(void) {
                 perror("getcwd");
             }
         } else if (strcmp(arguments[0], "cd") == 0) {
-            if (chdir(arguments[1]) == -1)
+            char *target = arguments[1];
+
+            if (target == NULL || strcmp(target, "~") == 0) {
+                char *home = getenv("HOME");
+                if (home == NULL) {
+                    fprintf(stderr, "HOME not set\n");
+                } else {
+                    chdir(home);
+                }
+            } else if (chdir(target) == -1)
                 fprintf(stderr, "cd: %s: %s\n", arguments[1], strerror(errno));
         } else {
             run_external_program(arguments);
