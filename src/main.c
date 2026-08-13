@@ -6,12 +6,29 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define MAX_ARGS 10
+#define MAX_ARGS 256
+
+typedef void (*builtin_func)(char *argv[]);
+
+typedef struct {
+    char *name;
+    builtin_func func;
+} builtin_command;
+
+void do_exit(char *argv[]);
+void do_echo(char *argv[]);
+void do_type(char *argv[]);
+void do_pwd(char *argv[]);
+void do_cd(char *argv[]);
 
 int read_line(char *input, size_t input_size);
 int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
+
+builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
+                              {"type", do_type}, {"pwd", do_pwd},
+                              {"cd", do_cd},     {NULL, NULL}};
 
 int main(void) {
     // Flush after every printf
@@ -28,70 +45,83 @@ int main(void) {
         }
 
         int arg_count = tokenize(arguments, inputs);
-
-        if (arg_count < 0) {
-            putchar('\n');
-            break; // Any negative return code means stop execution
-        } else if (arg_count == 0) {
+        if (arg_count == 0) {
             continue;
         }
 
-        if (strcmp(arguments[0], "exit") == 0) {
-            break;
-        } else if (strcmp(arguments[0], "echo") == 0) {
-            /* print the arguments entered after echo */
-            for (int i = 1; i < arg_count; i++)
-                printf("%s ", arguments[i]);
-            putchar('\n');
-        } else if (strcmp(arguments[0], "type") == 0) {
-            if (!arguments[1])
-                continue;
-
-            if (strcmp(arguments[1], "type") == 0 ||
-                strcmp(arguments[1], "exit") == 0 ||
-                strcmp(arguments[1], "echo") == 0 ||
-                strcmp(arguments[1], "pwd") == 0 ||
-                strcmp(arguments[1], "cd") == 0) {
-                printf("%s is a shell builtin\n", arguments[1]);
-                continue;
-            } else {
-                char *full_path = get_path(arguments[1]);
-
-                if (full_path) {
-                    printf("%s is %s\n", arguments[1], full_path);
-                    free(full_path);
-                } else {
-                    printf("%s: not found\n", arguments[1]);
-                }
+        int builtin_executed = 0;
+        for (int i = 0; builtins[i].name != NULL; i++) {
+            if (strcmp(arguments[0], builtins[i].name) == 0) {
+                builtins[i].func(arguments);
+                builtin_executed = 1;
+                break;
             }
+        }
 
-        } else if (strcmp(arguments[0], "pwd") == 0) {
-            char *dir = getcwd(NULL, 0);
-            if (dir != NULL) {
-                printf("%s\n", dir);
-                free(dir);
-            } else {
-                perror("getcwd");
-            }
-        } else if (strcmp(arguments[0], "cd") == 0) {
-            char *target = arguments[1];
-
-            if (target == NULL || strcmp(target, "~") == 0) {
-                char *home = getenv("HOME");
-                if (home == NULL) {
-                    fprintf(stderr, "HOME not set\n");
-                } else if (chdir(home) == -1) {
-                    fprintf(stderr, "cd: %s: %s\n", home, strerror(errno));
-                }
-            } else if (chdir(target) == -1) {
-                fprintf(stderr, "cd: %s: %s\n", target, strerror(errno));
-            }
-        } else {
+        if (!builtin_executed) {
             run_external_program(arguments);
         }
     }
 
     return 0;
+}
+
+void do_exit(char *argv[]) { exit(EXIT_SUCCESS); }
+
+void do_echo(char *argv[]) {
+    for (int i = 1; argv[i] != NULL; i++) {
+        if (i != 1) {
+            putchar(' ');
+        }
+        printf("%s", argv[i]);
+    }
+    putchar('\n');
+}
+
+void do_type(char *argv[]) {
+    if (argv[1] == NULL) {
+        return;
+    }
+
+    for (int i = 0; builtins[i].name != NULL; i++) {
+        if (strcmp(argv[1], builtins[i].name) == 0) {
+            printf("%s is a shell builtin\n", argv[1]);
+            return;
+        }
+    }
+
+    char *full_path = get_path(argv[1]);
+    if (full_path) {
+        printf("%s is %s\n", argv[1], full_path);
+        free(full_path);
+    } else {
+        printf("%s: not found\n", argv[1]);
+    }
+}
+
+void do_pwd(char *argv[]) {
+    char *dir = getcwd(NULL, 0);
+    if (dir != NULL) {
+        printf("%s\n", dir);
+        free(dir);
+    } else {
+        perror("getcwd");
+    }
+}
+
+void do_cd(char *argv[]) {
+    char *target = argv[1];
+
+    if (target == NULL || strcmp(target, "~") == 0) {
+        char *home = getenv("HOME");
+        if (home == NULL) {
+            fprintf(stderr, "HOME not set\n");
+        } else if (chdir(home) == -1) {
+            fprintf(stderr, "cd: %s: %s\n", home, strerror(errno));
+        }
+    } else if (chdir(target) == -1) {
+        fprintf(stderr, "cd: %s: %s\n", target, strerror(errno));
+    }
 }
 
 int read_line(char *input, size_t input_size) {
