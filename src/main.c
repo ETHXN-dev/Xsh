@@ -1,4 +1,6 @@
+#include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -140,17 +142,74 @@ int read_line(char *input, size_t input_size) {
  * a value of -1 indicates error with stdin or EOF reached
  */
 int tokenize(char *args[], char *buf) {
-    /* tokenize the input to become arguments */
     int argc = 0;
-    char *token = strtok(buf, " ");
-    while (token != NULL && argc < MAX_ARGS - 1) {
-        args[argc] = token;
-        token = strtok(NULL, " ");
-        argc++;
+    bool in_quote = false, in_arg = false;
+    while (*buf == ' ') {
+        buf++;
     }
-
-    args[argc] = NULL;
-
+    for (char *current = buf; *current != '\0'; current++) {
+        if (*current == ' ') {
+            if (in_arg) {
+                in_arg = false;
+                *current = '\0';
+            }
+        } else if (*current == '\'') {
+            if (in_quote) {
+                if (*(current + 1) != '\'') {
+                    in_quote = false;
+                    *current = '\0';
+                    continue;
+                }
+                in_quote = false;
+                continue;
+            }
+            if (!in_arg) {
+                if ((current == buf) || (*(current - 1) != '\'')) {
+                    in_quote = true;
+                    args[argc++] = current + 1;
+                    continue;
+                }
+            }
+            if ((*(current - 1) != '\0') &&
+                ((*(current - 1) == '\'') || (!isspace(*(current - 1))))) {
+                char *prev;
+                if (!isspace(*(current - 1)) && (*(current - 1) != '\''))
+                    prev = current++;
+                else
+                    prev = current++ - 1;
+                if (*current == '\'')
+                    current++;
+                while (*current != '\0' && *current != ' ') {
+                    if (*current == '\'') {
+                        current++;
+                        continue;
+                    }
+                    *prev = *current;
+                    prev++;
+                    current++;
+                }
+                *prev = '\0';
+                current--;
+            }
+        } else {
+            if (in_quote) {
+                if (*(current + 1) == '\0')
+                    return -1;
+            } else if (!in_arg) {
+                if ((current != buf) && (*(current - 1) == '\0')) {
+                    char *prev = current - 1;
+                    while (*current != '\0') {
+                        *prev = *current;
+                        prev++, current++;
+                    }
+                    *prev = '\0';
+                } else {
+                    in_arg = true;
+                    args[argc++] = current;
+                }
+            }
+        }
+    }
     return argc;
 }
 
