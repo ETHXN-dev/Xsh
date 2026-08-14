@@ -210,6 +210,7 @@ int tokenize(char *args[], char *buf) {
             }
         }
     }
+    args[argc] = NULL;
     return argc;
 }
 
