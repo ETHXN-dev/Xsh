@@ -11,6 +11,7 @@
 #define MAX_ARGS 256
 
 typedef void (*builtin_func)(char *argv[]);
+typedef enum { SEEKING, IN_ARG, IN_QUOTE } state_t;
 
 typedef struct {
     char *name;
@@ -47,7 +48,7 @@ int main(void) {
         }
 
         int arg_count = tokenize(arguments, inputs);
-        if (arg_count == 0) {
+        if (arg_count <= 0) {
             continue;
         }
 
@@ -143,74 +144,62 @@ int read_line(char *input, size_t input_size) {
  */
 int tokenize(char *args[], char *buf) {
     int argc = 0;
-    bool in_quote = false, in_arg = false;
-    while (*buf == ' ') {
+
+    state_t state = SEEKING;
+
+    while (*buf == ' ')
         buf++;
-    }
+
+    char *write = buf;
+
     for (char *current = buf; *current != '\0'; current++) {
-        if (*current == ' ') {
-            if (in_arg) {
-                in_arg = false;
-                *current = '\0';
-            }
-        } else if (*current == '\'') {
-            if (in_quote) {
-                if (*(current + 1) != '\'') {
-                    in_quote = false;
-                    *current = '\0';
+        char c = *current;
+
+        switch (state) {
+            case SEEKING: {
+                if (c == ' ')
                     continue;
-                }
-                in_quote = false;
-                continue;
-            }
-            if (!in_arg) {
-                if ((current == buf) || (*(current - 1) != '\'')) {
-                    in_quote = true;
-                    args[argc++] = current + 1;
-                    continue;
-                }
-            }
-            if ((*(current - 1) != '\0') &&
-                ((*(current - 1) == '\'') || (!isspace(*(current - 1))))) {
-                char *prev;
-                if (!isspace(*(current - 1)) && (*(current - 1) != '\''))
-                    prev = current++;
-                else
-                    prev = current++ - 1;
-                if (*current == '\'')
-                    current++;
-                while (*current != '\0' && *current != ' ') {
-                    if (*current == '\'') {
-                        current++;
-                        continue;
-                    }
-                    *prev = *current;
-                    prev++;
-                    current++;
-                }
-                *prev = '\0';
-                current--;
-            }
-        } else {
-            if (in_quote) {
-                if (*(current + 1) == '\0')
-                    return -1;
-            } else if (!in_arg) {
-                if ((current != buf) && (*(current - 1) == '\0')) {
-                    char *prev = current - 1;
-                    while (*current != '\0') {
-                        *prev = *current;
-                        prev++, current++;
-                    }
-                    *prev = '\0';
+                args[argc++] = write;
+                if (c == '\'') {
+                    state = IN_QUOTE;
                 } else {
-                    in_arg = true;
-                    args[argc++] = current;
+                    *write++ = c;
+                    state = IN_ARG;
                 }
+                break;
+            }
+            case IN_ARG: {
+                if (c == ' ') {
+                    *write++ = '\0';
+                    state = SEEKING;
+                } else if (c == '\'') {
+                    state = IN_QUOTE;
+                } else {
+                    *write++ = c;
+                }
+                break;
+            }
+            case IN_QUOTE: {
+                if (c == '\'') {
+                    state = IN_ARG;
+                } else {
+                    *write++ = c;
+                }
+                break;
             }
         }
     }
+
+    if (state == IN_QUOTE) {
+        return -1;
+    }
+
+    if (state == IN_ARG) {
+        *write = '\0';
+    }
+
     args[argc] = NULL;
+
     return argc;
 }
 
