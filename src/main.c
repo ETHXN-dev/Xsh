@@ -11,7 +11,7 @@
 #define MAX_ARGS 256
 
 typedef void (*builtin_func)(char *argv[]);
-typedef enum { SEEKING, IN_ARG, IN_QUOTE } state_t;
+typedef enum { SEEKING, IN_ARG, IN_SINGLE_QUOTE, IN_DOUBLE_QUOTE } state_t;
 
 typedef struct {
     char *name;
@@ -139,15 +139,23 @@ int read_line(char *input, size_t input_size) {
     return 0;
 }
 
-/* tokenizes input into an array of strings it returns the number of tokens read
- * a value of -1 indicates error with stdin or EOF reached
+/*
+ * tokenize: splits buf into whitespace-separated tokens, honoring
+ * single and double quotes. WARNING: mutates buf in place — args[]
+ * entries point directly into buf's storage, which is overwritten
+ * with '\0' separators and de-quoted content.
+ *
+ * Invariant: write always trails or equals current, since quote
+ * chars and delimiters are consumed without being copied.
+ *
+ * Returns argc on success, -1 on unterminated quote or too many args.
  */
 int tokenize(char *args[], char *buf) {
     int argc = 0;
 
     state_t state = SEEKING;
 
-    while (*buf == ' ')
+    while (isspace(*buf))
         buf++;
 
     char *write = buf;
@@ -157,11 +165,17 @@ int tokenize(char *args[], char *buf) {
 
         switch (state) {
             case SEEKING: {
-                if (c == ' ')
+                if (isspace(c))
                     continue;
+                if (argc >= MAX_ARGS - 1) {
+                    args[argc] = NULL;
+                    return -1;
+                }
                 args[argc++] = write;
                 if (c == '\'') {
-                    state = IN_QUOTE;
+                    state = IN_SINGLE_QUOTE;
+                } else if (c == '"') {
+                    state = IN_DOUBLE_QUOTE;
                 } else {
                     *write++ = c;
                     state = IN_ARG;
@@ -169,18 +183,28 @@ int tokenize(char *args[], char *buf) {
                 break;
             }
             case IN_ARG: {
-                if (c == ' ') {
+                if (isspace(c)) {
                     *write++ = '\0';
                     state = SEEKING;
                 } else if (c == '\'') {
-                    state = IN_QUOTE;
+                    state = IN_SINGLE_QUOTE;
+                } else if (c == '"') {
+                    state = IN_DOUBLE_QUOTE;
                 } else {
                     *write++ = c;
                 }
                 break;
             }
-            case IN_QUOTE: {
+            case IN_SINGLE_QUOTE: {
                 if (c == '\'') {
+                    state = IN_ARG;
+                } else {
+                    *write++ = c;
+                }
+                break;
+            }
+            case IN_DOUBLE_QUOTE: {
+                if (c == '"') {
                     state = IN_ARG;
                 } else {
                     *write++ = c;
@@ -190,11 +214,12 @@ int tokenize(char *args[], char *buf) {
         }
     }
 
-    if (state == IN_QUOTE) {
+    if (state == IN_SINGLE_QUOTE || state == IN_DOUBLE_QUOTE) {
         return -1;
     }
 
     if (state == IN_ARG) {
+        args[argc] = NULL;
         *write = '\0';
     }
 
