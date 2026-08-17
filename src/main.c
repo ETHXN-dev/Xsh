@@ -237,6 +237,19 @@ int tokenize(char *args[], char *buf) {
             case IN_DOUBLE_QUOTE: {
                 if (c == '"') {
                     state = IN_ARG;
+                } else if (c == '\\') {
+                    switch (*(current + 1)) {
+                        case '\"':
+                        case '\\': {
+                            *write++ = *(current + 1);
+                            current++;
+                            break;
+                        }
+                        default: {
+                            *write++ = c;
+                            break;
+                        }
+                    }
                 } else {
                     *write++ = c;
                 }
