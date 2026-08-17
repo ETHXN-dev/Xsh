@@ -20,6 +20,12 @@ typedef enum {
     ESCAPING
 } state_t;
 
+typedef enum {
+    TOKENIZE_ERR_TOO_MANY_ARGS = -1,
+    TOKENIZE_ERR_UNTERMINATED_QUOTE = -2,
+    TOKENIZE_ERR_TRAILING_ESCAPE = -3,
+} tokenize_err_t;
+
 typedef struct {
     char *name;
     builtin_func func;
@@ -55,7 +61,21 @@ int main(void) {
         }
 
         int arg_count = tokenize(arguments, inputs);
-        if (arg_count <= 0) {
+        if (arg_count == 0) {
+            continue; // blank line, nothing to do
+        }
+        if (arg_count < 0) {
+            switch (arg_count) {
+                case TOKENIZE_ERR_TOO_MANY_ARGS:
+                    fprintf(stderr, "shell: too many arguments\n");
+                    break;
+                case TOKENIZE_ERR_UNTERMINATED_QUOTE:
+                    fprintf(stderr, "shell: unterminated quote\n");
+                    break;
+                case TOKENIZE_ERR_TRAILING_ESCAPE:
+                    fprintf(stderr, "shell: trailing backslash\n");
+                    break;
+            }
             continue;
         }
 
@@ -162,7 +182,7 @@ int tokenize(char *args[], char *buf) {
 
     state_t state = SEEKING;
 
-    while (isspace(*buf))
+    while (isspace((unsigned)*buf))
         buf++;
 
     char *write = buf;
@@ -172,11 +192,11 @@ int tokenize(char *args[], char *buf) {
 
         switch (state) {
             case SEEKING: {
-                if (isspace(c))
+                if (isspace((unsigned)c))
                     continue;
                 if (argc >= MAX_ARGS - 1) {
-                    args[argc] = NULL;
-                    return -1;
+                    args[0] = NULL;
+                    return TOKENIZE_ERR_TOO_MANY_ARGS;
                 }
                 args[argc++] = write;
                 if (c == '\'') {
@@ -192,7 +212,7 @@ int tokenize(char *args[], char *buf) {
                 break;
             }
             case IN_ARG: {
-                if (isspace(c)) {
+                if (isspace((unsigned)c)) {
                     *write++ = '\0';
                     state = SEEKING;
                 } else if (c == '\'') {
@@ -231,21 +251,19 @@ int tokenize(char *args[], char *buf) {
     }
 
     if (state == IN_SINGLE_QUOTE || state == IN_DOUBLE_QUOTE) {
-        return -1;
-    }
-
-    if (state == IN_ARG) {
-        args[argc] = NULL;
-        *write = '\0';
+        args[0] = NULL;
+        return TOKENIZE_ERR_UNTERMINATED_QUOTE;
     }
 
     if (state == ESCAPING) {
-        args[argc] = NULL;
-        return -1;
+        args[0] = NULL;
+        return TOKENIZE_ERR_TRAILING_ESCAPE;
     }
 
-    args[argc] = NULL;
+    if (state == IN_ARG)
+        *write = '\0';
 
+    args[argc] = NULL;
     return argc;
 }
 
