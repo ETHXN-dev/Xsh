@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
+#include <readline/chardefs.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -11,7 +12,13 @@
 #define MAX_ARGS 256
 
 typedef void (*builtin_func)(char *argv[]);
-typedef enum { SEEKING, IN_ARG, IN_SINGLE_QUOTE, IN_DOUBLE_QUOTE } state_t;
+typedef enum {
+    SEEKING,
+    IN_ARG,
+    IN_SINGLE_QUOTE,
+    IN_DOUBLE_QUOTE,
+    ESCAPING
+} state_t;
 
 typedef struct {
     char *name;
@@ -176,6 +183,8 @@ int tokenize(char *args[], char *buf) {
                     state = IN_SINGLE_QUOTE;
                 } else if (c == '"') {
                     state = IN_DOUBLE_QUOTE;
+                } else if (c == '\\') {
+                    state = ESCAPING;
                 } else {
                     *write++ = c;
                     state = IN_ARG;
@@ -190,6 +199,8 @@ int tokenize(char *args[], char *buf) {
                     state = IN_SINGLE_QUOTE;
                 } else if (c == '"') {
                     state = IN_DOUBLE_QUOTE;
+                } else if (c == '\\') {
+                    state = ESCAPING;
                 } else {
                     *write++ = c;
                 }
@@ -211,6 +222,11 @@ int tokenize(char *args[], char *buf) {
                 }
                 break;
             }
+            case ESCAPING: {
+                *write++ = c;
+                state = IN_ARG;
+                break;
+            }
         }
     }
 
@@ -221,6 +237,11 @@ int tokenize(char *args[], char *buf) {
     if (state == IN_ARG) {
         args[argc] = NULL;
         *write = '\0';
+    }
+
+    if (state == ESCAPING) {
+        args[argc] = NULL;
+        return -1;
     }
 
     args[argc] = NULL;
