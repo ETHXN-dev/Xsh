@@ -1,6 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
-#include <readline/chardefs.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -41,6 +41,8 @@ int read_line(char *input, size_t input_size);
 int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
+void execute_command(char *argv[]);
+void redirect_stdout(char *argv[], char *filename);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
@@ -79,17 +81,28 @@ int main(void) {
             continue;
         }
 
-        int builtin_executed = 0;
-        for (int i = 0; builtins[i].name != NULL; i++) {
-            if (strcmp(arguments[0], builtins[i].name) == 0) {
-                builtins[i].func(arguments);
-                builtin_executed = 1;
+        bool redirected = false;
+        char *filename = NULL;
+        for (int i = 0; arguments[i] != NULL; i++) {
+            if ((strcmp(arguments[i], ">") == 0) ||
+                (strcmp(arguments[i], "1>") == 0)) {
+                redirected = true;
+                arguments[i] = NULL;
+                filename = arguments[i + 1];
                 break;
             }
         }
 
-        if (!builtin_executed) {
-            run_external_program(arguments);
+        // user didn't enter a file to redirect to
+        if (redirected && (filename == NULL)) {
+            fprintf(stderr, "syntax error near unexpected token `newline'\n");
+            return 1;
+        }
+
+        if (redirected) {
+            redirect_stdout(arguments, filename);
+        } else {
+            execute_command(arguments);
         }
     }
 
@@ -125,7 +138,7 @@ void do_type(char *argv[]) {
         printf("%s is %s\n", argv[1], full_path);
         free(full_path);
     } else {
-        printf("%s: not found\n", argv[1]);
+        fprintf(stderr, "%s: not found\n", argv[1]);
     }
 }
 
@@ -345,4 +358,56 @@ void run_external_program(char *argv[]) {
     }
 
     free(full_path);
+}
+
+void execute_command(char *argv[]) {
+    for (int i = 0; builtins[i].name != NULL; i++) {
+        if (strcmp(argv[0], builtins[i].name) == 0) {
+            builtins[i].func(argv);
+            return;
+        }
+    }
+
+    run_external_program(argv);
+}
+
+void redirect_stdout(char *argv[], char *filename) {
+    // duplicate stdout file descriptor to revert redirection later
+    int saved_stdout = dup(STDOUT_FILENO);
+    if (saved_stdout == -1) {
+        perror("dup");
+        return;
+    }
+
+    // get fd with flags O_WRONLY for writing data
+    //                   O_CREAT for file creation
+    //                   O_TRUNC to right over existing data
+    // mode 6 (User): Read (4) + Write (2) = RW
+    //      4 (Group): Read (4) = R
+    //      4 (Other): Read (4) = R
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        perror("open");
+        close(saved_stdout);
+        return;
+    }
+
+    if ((dup2(fd, STDOUT_FILENO)) == -1) {
+        perror("dup2 redirect");
+        close(fd);
+        close(saved_stdout);
+        return;
+    }
+
+    close(fd);
+
+    execute_command(argv);
+
+    if ((dup2(saved_stdout, STDOUT_FILENO)) == -1) {
+        perror("dup2 restore");
+        close(saved_stdout);
+        return;
+    }
+
+    close(saved_stdout);
 }
