@@ -42,7 +42,7 @@ int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 void execute_command(char *argv[]);
-void redirect_stdout(char *argv[], char *filename);
+void redirect_stream(char *argv[], char *filename, int stream);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
@@ -81,12 +81,18 @@ int main(void) {
             continue;
         }
 
-        bool redirected = false;
+        bool redirected_stdout = false;
+        bool redirected_stderr = false;
         char *filename = NULL;
         for (int i = 0; arguments[i] != NULL; i++) {
             if ((strcmp(arguments[i], ">") == 0) ||
                 (strcmp(arguments[i], "1>") == 0)) {
-                redirected = true;
+                redirected_stdout = true;
+                arguments[i] = NULL;
+                filename = arguments[i + 1];
+                break;
+            } else if (strcmp(arguments[i], "2>") == 0) {
+                redirected_stderr = true;
                 arguments[i] = NULL;
                 filename = arguments[i + 1];
                 break;
@@ -94,13 +100,15 @@ int main(void) {
         }
 
         // user didn't enter a file to redirect to
-        if (redirected && (filename == NULL)) {
+        if ((redirected_stdout || redirected_stderr) && (filename == NULL)) {
             fprintf(stderr, "syntax error near unexpected token `newline'\n");
             return 1;
         }
 
-        if (redirected) {
-            redirect_stdout(arguments, filename);
+        if (redirected_stdout) {
+            redirect_stream(arguments, filename, STDOUT_FILENO);
+        } else if (redirected_stderr) {
+            redirect_stream(arguments, filename, STDERR_FILENO);
         } else {
             execute_command(arguments);
         }
@@ -371,10 +379,10 @@ void execute_command(char *argv[]) {
     run_external_program(argv);
 }
 
-void redirect_stdout(char *argv[], char *filename) {
-    // duplicate stdout file descriptor to revert redirection later
-    int saved_stdout = dup(STDOUT_FILENO);
-    if (saved_stdout == -1) {
+void redirect_stream(char *argv[], char *filename, int stream) {
+    // duplicate stream file descriptor to revert redirection later
+    int saved_stream = dup(stream);
+    if (saved_stream == -1) {
         perror("dup");
         return;
     }
@@ -388,14 +396,14 @@ void redirect_stdout(char *argv[], char *filename) {
     int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1) {
         perror("open");
-        close(saved_stdout);
+        close(saved_stream);
         return;
     }
 
-    if ((dup2(fd, STDOUT_FILENO)) == -1) {
+    if ((dup2(fd, stream)) == -1) {
         perror("dup2 redirect");
         close(fd);
-        close(saved_stdout);
+        close(saved_stream);
         return;
     }
 
@@ -403,11 +411,11 @@ void redirect_stdout(char *argv[], char *filename) {
 
     execute_command(argv);
 
-    if ((dup2(saved_stdout, STDOUT_FILENO)) == -1) {
+    if ((dup2(saved_stream, stream)) == -1) {
         perror("dup2 restore");
-        close(saved_stdout);
+        close(saved_stream);
         return;
     }
 
-    close(saved_stdout);
+    close(saved_stream);
 }
