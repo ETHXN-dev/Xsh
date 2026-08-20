@@ -42,7 +42,7 @@ int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 void execute_command(char *argv[]);
-void redirect_stream(char *argv[], char *filename, int stream);
+void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
@@ -83,6 +83,7 @@ int main(void) {
 
         bool redirected_stdout = false;
         bool redirected_stderr = false;
+        int append = 0;
         char *filename = NULL;
         for (int i = 0; arguments[i] != NULL; i++) {
             if ((strcmp(arguments[i], ">") == 0) ||
@@ -96,6 +97,13 @@ int main(void) {
                 arguments[i] = NULL;
                 filename = arguments[i + 1];
                 break;
+            } else if ((strcmp(arguments[i], ">>") == 0) ||
+                       (strcmp(arguments[i], "1>>") == 0)) {
+                append = 1;
+                redirected_stdout = true;
+                arguments[i] = NULL;
+                filename = arguments[i + 1];
+                break;
             }
         }
 
@@ -106,9 +114,9 @@ int main(void) {
         }
 
         if (redirected_stdout) {
-            redirect_stream(arguments, filename, STDOUT_FILENO);
+            redirect_stream(arguments, filename, STDOUT_FILENO, append);
         } else if (redirected_stderr) {
-            redirect_stream(arguments, filename, STDERR_FILENO);
+            redirect_stream(arguments, filename, STDERR_FILENO, 0);
         } else {
             execute_command(arguments);
         }
@@ -379,7 +387,7 @@ void execute_command(char *argv[]) {
     run_external_program(argv);
 }
 
-void redirect_stream(char *argv[], char *filename, int stream) {
+void redirect_stream(char *argv[], char *filename, int stream, int append) {
     // duplicate stream file descriptor to revert redirection later
     int saved_stream = dup(stream);
     if (saved_stream == -1) {
@@ -393,7 +401,8 @@ void redirect_stream(char *argv[], char *filename, int stream) {
     // mode 6 (User): Read (4) + Write (2) = RW
     //      4 (Group): Read (4) = R
     //      4 (Other): Read (4) = R
-    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int flags = O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
+    int fd = open(filename, flags, 0644);
     if (fd == -1) {
         perror("open");
         close(saved_stream);
