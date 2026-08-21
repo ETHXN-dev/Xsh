@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <readline/readline.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -67,18 +68,14 @@ int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
 
-    char inputs[1024];
-
     while (1) {
-        printf("$ ");
+        char *inputs = readline("$ ");
 
         char *arguments[MAX_ARGS];
-        if (read_line(inputs, sizeof(inputs)) == -1) {
-            exit(EXIT_FAILURE);
-        }
 
         int arg_count = tokenize(arguments, inputs);
         if (arg_count == 0) {
+            free(inputs);
             continue; // blank line, nothing to do
         }
         if (arg_count < 0) {
@@ -126,6 +123,7 @@ int main(void) {
         } else {
             execute_command(arguments);
         }
+        free(inputs);
     }
 
     return 0;
@@ -187,18 +185,6 @@ void do_cd(char *argv[]) {
     } else if (chdir(target) == -1) {
         fprintf(stderr, "cd: %s: %s\n", target, strerror(errno));
     }
-}
-
-int read_line(char *input, size_t input_size) {
-    if (fgets(input, input_size, stdin) == NULL) {
-        if (ferror(stdin))
-            perror("fgets failed");
-        return -1;
-    }
-
-    /* remove the trailing newline */
-    input[strcspn(input, "\n")] = '\0';
-    return 0;
 }
 
 /*
