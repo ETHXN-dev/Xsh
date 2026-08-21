@@ -28,6 +28,12 @@ typedef enum {
 
 typedef struct {
     char *name;
+    int fd;
+    bool append;
+} redirect_type_t;
+
+typedef struct {
+    char *name;
     builtin_func func;
 } builtin_command;
 
@@ -42,11 +48,20 @@ int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 void execute_command(char *argv[]);
+redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
                               {"cd", do_cd},     {NULL, NULL}};
+
+redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
+                                    {"1>", STDOUT_FILENO, false},
+                                    {"2>", STDERR_FILENO, false},
+                                    {">>", STDOUT_FILENO, true},
+                                    {"1>>", STDOUT_FILENO, true},
+                                    {"2>>", STDERR_FILENO, true},
+                                    {NULL, 0, false}};
 
 int main(void) {
     // Flush after every printf
@@ -81,42 +96,33 @@ int main(void) {
             continue;
         }
 
-        bool redirected_stdout = false;
-        bool redirected_stderr = false;
-        int append = 0;
+        redirect_type_t *redirect = NULL;
         char *filename = NULL;
-        for (int i = 0; arguments[i] != NULL; i++) {
-            if ((strcmp(arguments[i], ">") == 0) ||
-                (strcmp(arguments[i], "1>") == 0)) {
-                redirected_stdout = true;
-                arguments[i] = NULL;
-                filename = arguments[i + 1];
-                break;
-            } else if (strcmp(arguments[i], "2>") == 0) {
-                redirected_stderr = true;
-                arguments[i] = NULL;
-                filename = arguments[i + 1];
-                break;
-            } else if ((strcmp(arguments[i], ">>") == 0) ||
-                       (strcmp(arguments[i], "1>>") == 0)) {
-                append = 1;
-                redirected_stdout = true;
-                arguments[i] = NULL;
-                filename = arguments[i + 1];
+        int idx;
+        for (idx = 0; arguments[idx] != NULL; idx++) {
+            redirect = classify_redirect(arguments[idx]);
+            if (redirect != NULL) {
+                arguments[idx] = NULL;
+                filename = arguments[idx + 1];
                 break;
             }
         }
 
-        // user didn't enter a file to redirect to
-        if ((redirected_stdout || redirected_stderr) && (filename == NULL)) {
-            fprintf(stderr, "syntax error near unexpected token `newline'\n");
-            return 1;
+        if (idx == 0) {
+            fprintf(stderr, "syntax error: expected command\n");
+            continue;
         }
 
-        if (redirected_stdout) {
-            redirect_stream(arguments, filename, STDOUT_FILENO, append);
-        } else if (redirected_stderr) {
-            redirect_stream(arguments, filename, STDERR_FILENO, 0);
+        if (redirect != NULL) {
+            if (filename == NULL) {
+                // user didn't enter a file to redirect to
+                fprintf(stderr,
+                        "syntax error near unexpected token `newline'\n");
+                return 1;
+            } else {
+                redirect_stream(arguments, filename, redirect->fd,
+                                redirect->append);
+            }
         } else {
             execute_command(arguments);
         }
@@ -385,6 +391,15 @@ void execute_command(char *argv[]) {
     }
 
     run_external_program(argv);
+}
+
+redirect_type_t *classify_redirect(const char *s) {
+    for (int i = 0; redirect_types[i].name != NULL; i++) {
+        if (strcmp(s, redirect_types[i].name) == 0) {
+            return &redirect_types[i];
+        }
+    }
+    return NULL;
 }
 
 void redirect_stream(char *argv[], char *filename, int stream, int append) {
