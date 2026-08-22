@@ -45,6 +45,7 @@ void do_pwd(char *argv[]);
 void do_cd(char *argv[]);
 
 int tokenize(char *args[], char *buf);
+void print_tokenize_error(int err);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 void execute_command(char *argv[]);
@@ -87,17 +88,7 @@ int main(void) {
             continue; // blank line, nothing to do
         }
         if (arg_count < 0) {
-            switch (arg_count) {
-                case TOKENIZE_ERR_TOO_MANY_ARGS:
-                    fprintf(stderr, "shell: too many arguments\n");
-                    break;
-                case TOKENIZE_ERR_UNTERMINATED_QUOTE:
-                    fprintf(stderr, "shell: unterminated quote\n");
-                    break;
-                case TOKENIZE_ERR_TRAILING_ESCAPE:
-                    fprintf(stderr, "shell: trailing backslash\n");
-                    break;
-            }
+            print_tokenize_error(arg_count);
             free(inputs);
             continue;
         }
@@ -310,6 +301,20 @@ int tokenize(char *args[], char *buf) {
 
     args[argc] = NULL;
     return argc;
+}
+
+void print_tokenize_error(int err) {
+    switch (err) {
+        case TOKENIZE_ERR_TOO_MANY_ARGS:
+            fprintf(stderr, "shell: too many arguments\n");
+            break;
+        case TOKENIZE_ERR_UNTERMINATED_QUOTE:
+            fprintf(stderr, "shell: unterminated quote\n");
+            break;
+        case TOKENIZE_ERR_TRAILING_ESCAPE:
+            fprintf(stderr, "shell: trailing backslash\n");
+            break;
+    }
 }
 
 char *get_path(char *command) {
