@@ -44,13 +44,16 @@ void do_type(char *argv[]);
 void do_pwd(char *argv[]);
 void do_cd(char *argv[]);
 
-int read_line(char *input, size_t input_size);
 int tokenize(char *args[], char *buf);
 char *get_path(char *command);
 void run_external_program(char *argv[]);
 void execute_command(char *argv[]);
+
 redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
+
+char *command_generator(const char *text, int state);
+char **my_completion(const char *text, int start, int end);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
@@ -68,8 +71,13 @@ int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
 
+    rl_attempted_completion_function = my_completion;
+
     while (1) {
         char *inputs = readline("$ ");
+        if (inputs == NULL) {
+            exit(EXIT_SUCCESS);
+        }
 
         char *arguments[MAX_ARGS];
 
@@ -90,6 +98,7 @@ int main(void) {
                     fprintf(stderr, "shell: trailing backslash\n");
                     break;
             }
+            free(inputs);
             continue;
         }
 
@@ -107,6 +116,7 @@ int main(void) {
 
         if (idx == 0) {
             fprintf(stderr, "syntax error: expected command\n");
+            free(inputs);
             continue;
         }
 
@@ -115,7 +125,8 @@ int main(void) {
                 // user didn't enter a file to redirect to
                 fprintf(stderr,
                         "syntax error near unexpected token `newline'\n");
-                return 1;
+                free(inputs);
+                continue;
             } else {
                 redirect_stream(arguments, filename, redirect->fd,
                                 redirect->append);
@@ -428,4 +439,44 @@ void redirect_stream(char *argv[], char *filename, int stream, int append) {
     }
 
     close(saved_stream);
+}
+
+/* Completion generator for GNU readline's rl_completion_matches().
+ * Readline calls this repeatedly with the same partial `text`,
+ * incrementing `state` each time; state == 0 signals a new completion attempt,
+ * so we reset our position in `builtins`.
+ * Returns a strdup'd name of the next builtin whose name starts with `text`,
+ * or NULL when no more matches remain. */
+char *command_generator(const char *text, int state) {
+    static int index;
+    static size_t len;
+
+    if (state == 0) {
+        index = 0;
+        len = strlen(text);
+    }
+
+    while (builtins[index].name != NULL) {
+        char *name = builtins[index].name;
+        index++;
+
+        if (strncmp(text, name, len) == 0) {
+            return strdup(name);
+        }
+    }
+    return NULL;
+}
+
+/* Custom completion function for GNU readline (set via
+ * rl_attempted_completion_function). Called once per completion attempt with
+ * the full line context: `text` is the word being completed, `start`/`end` are
+ * its offsets into rl_line_buffer. We only offer builtin-name completions when
+ * the word being completed is the first word on the line (start == 0);
+ * otherwise we return NULL so readline falls back to its default filename
+ * completion. */
+char **my_completion(const char *text, int start, int end) {
+    if (start == 0) {
+        return rl_completion_matches(text, command_generator);
+    }
+    return NULL;
 }
