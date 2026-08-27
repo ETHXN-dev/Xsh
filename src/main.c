@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <readline/readline.h>
@@ -11,6 +12,9 @@
 #include <unistd.h>
 
 #define MAX_ARGS 256
+
+#define IS_DOT_OR_DOTDOT(s)                                                    \
+    (s[0] == '.' && ((s[1] == '\0') || (s[1] == '.' && s[2] == '\0')))
 
 typedef void (*builtin_func)(char *argv[]);
 typedef enum {
@@ -455,10 +459,26 @@ void redirect_stream(char *argv[], char *filename, int stream, int append) {
 char *command_generator(const char *text, int state) {
     static int index;
     static size_t len;
+    static char *path;
+    static char *dir_in_path;
 
     if (state == 0) {
         index = 0;
         len = strlen(text);
+
+        path = getenv("PATH");
+        if (path == NULL) {
+            fprintf(stderr, "PATH not set\n");
+            return NULL;
+        }
+
+        path = strdup(path);
+        if (path == NULL) {
+            perror("strdup");
+            return NULL;
+        }
+
+        dir_in_path = strtok(path, ":");
     }
 
     while (builtins[index].name != NULL) {
@@ -469,6 +489,34 @@ char *command_generator(const char *text, int state) {
             return strdup(name);
         }
     }
+
+    while (dir_in_path != NULL) {
+        static DIR *dir;
+
+        if (dir == NULL) {
+            dir = opendir(dir_in_path);
+        }
+
+        struct dirent *entry;
+
+        while ((entry = readdir(dir)) != NULL) {
+            if (IS_DOT_OR_DOTDOT(entry->d_name)) {
+                continue;
+            }
+
+            if (strncmp(text, entry->d_name, len) == 0) {
+                return strdup(entry->d_name);
+            }
+        }
+
+        closedir(dir);
+        dir = NULL;
+
+        dir_in_path = strtok(NULL, ":");
+    }
+
+    free(path);
+
     return NULL;
 }
 
