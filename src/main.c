@@ -459,26 +459,26 @@ void redirect_stream(char *argv[], char *filename, int stream, int append) {
 char *command_generator(const char *text, int state) {
     static int index;
     static size_t len;
-    static char *path;
-    static char *dir_in_path;
+    static char *path_copy;
+    static char *dir_token;
 
     if (state == 0) {
         index = 0;
         len = strlen(text);
 
-        path = getenv("PATH");
-        if (path == NULL) {
+        path_copy = getenv("PATH");
+        if (path_copy == NULL) {
             fprintf(stderr, "PATH not set\n");
             return NULL;
         }
 
-        path = strdup(path);
-        if (path == NULL) {
+        path_copy = strdup(path_copy);
+        if (path_copy == NULL) {
             perror("strdup");
             return NULL;
         }
 
-        dir_in_path = strtok(path, ":");
+        dir_token = strtok(path_copy, ":");
     }
 
     while (builtins[index].name != NULL) {
@@ -490,16 +490,22 @@ char *command_generator(const char *text, int state) {
         }
     }
 
-    while (dir_in_path != NULL) {
-        static DIR *dir;
+    while (dir_token != NULL) {
+        static DIR *current_dir;
 
-        if (dir == NULL) {
-            dir = opendir(dir_in_path);
+        if (current_dir == NULL) {
+            current_dir = opendir(dir_token);
+
+            if (current_dir == NULL) {
+                fprintf(stderr, "opendir(%s): %s\n", dir_token,
+                        strerror(errno));
+                dir_token = strtok(NULL, ":");
+                continue;
+            }
         }
 
         struct dirent *entry;
-
-        while ((entry = readdir(dir)) != NULL) {
+        while ((entry = readdir(current_dir)) != NULL) {
             if (IS_DOT_OR_DOTDOT(entry->d_name)) {
                 continue;
             }
@@ -509,13 +515,13 @@ char *command_generator(const char *text, int state) {
             }
         }
 
-        closedir(dir);
-        dir = NULL;
+        closedir(current_dir);
+        current_dir = NULL;
 
-        dir_in_path = strtok(NULL, ":");
+        dir_token = strtok(NULL, ":");
     }
 
-    free(path);
+    free(path_copy);
 
     return NULL;
 }
