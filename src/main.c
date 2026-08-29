@@ -60,9 +60,9 @@ void redirect_stream(char *argv[], char *filename, int stream, int append);
 char *command_generator(const char *text, int state);
 char **my_completion(const char *text, int start, int end);
 
-builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
-                              {"type", do_type}, {"pwd", do_pwd},
-                              {"cd", do_cd},     {NULL, NULL}};
+builtin_command builtins[] = {
+    {"exit", do_exit}, {"echo", do_echo},  {"type", do_type}, {"pwd", do_pwd},
+    {"cd", do_cd},     {"complete", NULL}, {NULL, NULL}};
 
 redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
                                     {"1>", STDOUT_FILENO, false},
