@@ -47,6 +47,7 @@ void do_echo(char *argv[]);
 void do_type(char *argv[]);
 void do_pwd(char *argv[]);
 void do_cd(char *argv[]);
+void do_complete(char *argv[]);
 
 int tokenize(char *args[], char *buf);
 void print_tokenize_error(int err);
@@ -60,9 +61,10 @@ void redirect_stream(char *argv[], char *filename, int stream, int append);
 char *command_generator(const char *text, int state);
 char **my_completion(const char *text, int start, int end);
 
-builtin_command builtins[] = {
-    {"exit", do_exit}, {"echo", do_echo},  {"type", do_type}, {"pwd", do_pwd},
-    {"cd", do_cd},     {"complete", NULL}, {NULL, NULL}};
+builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
+                              {"type", do_type}, {"pwd", do_pwd},
+                              {"cd", do_cd},     {"complete", do_complete},
+                              {NULL, NULL}};
 
 redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
                                     {"1>", STDOUT_FILENO, false},
@@ -190,6 +192,19 @@ void do_cd(char *argv[]) {
         }
     } else if (chdir(target) == -1) {
         fprintf(stderr, "cd: %s: %s\n", target, strerror(errno));
+    }
+}
+
+void do_complete(char *argv[]) {
+    if (argv[1] == NULL) {
+        return;
+    }
+
+    if (strcmp(argv[1], "-p") == 0) {
+        if (argv[2] == NULL) {
+            return;
+        }
+        printf("complete: %s: no completion specification\n", argv[2]);
     }
 }
 
