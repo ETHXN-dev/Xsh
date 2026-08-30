@@ -2,6 +2,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/limits.h>
 #include <readline/readline.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,6 +13,8 @@
 #include <unistd.h>
 
 #define MAX_ARGS 256
+#define MAX_CMD_LEN 1024
+#define MAX_COMPLETIONS 1024
 
 #define IS_DOT_OR_DOTDOT(s)                                                    \
     (s[0] == '.' && ((s[1] == '\0') || (s[1] == '.' && s[2] == '\0')))
@@ -41,6 +44,11 @@ typedef struct {
     char *name;
     builtin_func func;
 } builtin_command;
+
+typedef struct {
+    char command[MAX_CMD_LEN];
+    char script_path[PATH_MAX];
+} completion_register_t;
 
 void do_exit(char *argv[]);
 void do_echo(char *argv[]);
@@ -73,6 +81,12 @@ redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
                                     {"1>>", STDOUT_FILENO, true},
                                     {"2>>", STDERR_FILENO, true},
                                     {NULL, 0, false}};
+
+/* Stores completions entered by user.
+ * Last slot is intentionally empty as a sentinel
+ * Usable capacity is therefore MAX_COMPLETIONS - 1, not MAX_COMPLETIONS.
+ */
+completion_register_t Completions_registered[MAX_COMPLETIONS];
 
 int main(void) {
     // Flush after every printf
@@ -204,7 +218,50 @@ void do_complete(char *argv[]) {
         if (argv[2] == NULL) {
             return;
         }
+
+        char *command = argv[2];
+        for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
+            if (strcmp(command, Completions_registered[i].command) == 0) {
+                printf("complete -C '%s' %s\n",
+                       Completions_registered[i].script_path, command);
+                return;
+            }
+        }
         printf("complete: %s: no completion specification\n", argv[2]);
+
+    } else if (strcmp(argv[1], "-C") == 0) {
+        if (argv[3] == NULL || argv[2] == NULL) {
+            return;
+        }
+
+        char *script_path = argv[2];
+        char *command = argv[3];
+        int idx = 0;
+
+        for (idx = 0; idx < MAX_COMPLETIONS - 1; idx++) {
+            if (Completions_registered[idx].command[0] == '\0') {
+                break;
+            }
+
+            if (strcmp(Completions_registered[idx].command, command) == 0) {
+                strncpy(Completions_registered[idx].script_path, script_path,
+                        PATH_MAX);
+                Completions_registered[idx].script_path[PATH_MAX - 1] = '\0';
+                return;
+            }
+        }
+
+        if (idx == MAX_COMPLETIONS - 1) {
+            fprintf(stderr, "shell can only contain %d completions\n",
+                    MAX_COMPLETIONS - 1);
+            return;
+        }
+
+        strncpy(Completions_registered[idx].command, command, MAX_CMD_LEN);
+        Completions_registered[idx].command[MAX_CMD_LEN - 1] = '\0';
+
+        strncpy(Completions_registered[idx].script_path, script_path, PATH_MAX);
+        Completions_registered[idx].script_path[PATH_MAX - 1] = '\0';
     }
 }
 
