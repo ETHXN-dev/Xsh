@@ -608,6 +608,53 @@ char *command_generator(const char *text, int state) {
 char **my_completion(const char *text, int start, int end) {
     if (start == 0) {
         return rl_completion_matches(text, command_generator);
+    } else {
+        char *line_buffer_copy = strdup(rl_line_buffer);
+        if (line_buffer_copy == NULL) {
+            perror("strdup");
+            return NULL;
+        }
+
+        char *command_name = strtok(line_buffer_copy, " \t");
+
+        // search for command_name in Completions
+        for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
+            if (strcmp(Completions_registered[i].command, command_name) == 0) {
+                free(line_buffer_copy);
+
+                FILE *fp = popen(Completions_registered->script_path, "r");
+                if (fp == NULL) {
+                    perror("popen");
+                    return NULL;
+                }
+
+                char *line = NULL;
+                size_t n = 0;
+                ssize_t len = getline(&line, &n, fp);
+                if (len == -1) {
+                    perror("getline");
+                    free(line);
+                    return NULL;
+                }
+                line[len - 1] = '\0';
+
+                char **result = malloc(2 * sizeof(char *));
+                result[0] = line;
+                result[1] = NULL;
+
+                int exit_status = pclose(fp);
+                if (exit_status == -1) {
+                    perror("pclose");
+                    free(result);
+                    free(line);
+                    return NULL;
+                }
+
+                return result;
+            }
+        }
+
+        free(line_buffer_copy);
     }
     return NULL;
 }
