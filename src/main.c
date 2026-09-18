@@ -622,23 +622,39 @@ char **my_completion(const char *text, int start, int end) {
             if (strcmp(Completions_registered[i].command, command_name) == 0) {
                 free(line_buffer_copy);
 
-                FILE *fp = popen(Completions_registered->script_path, "r");
+                FILE *fp = popen(Completions_registered[i].script_path, "r");
                 if (fp == NULL) {
                     perror("popen");
                     return NULL;
                 }
 
                 char *line = NULL;
-                size_t n = 0;
-                ssize_t len = getline(&line, &n, fp);
-                if (len == -1) {
-                    perror("getline");
+                size_t len = 0;
+                ssize_t nread = getline(&line, &len, fp);
+                if (nread == -1) {
+                    if (feof(fp)) {
+                        /* Prevent readline from using default filename
+                         * completion */
+                        rl_attempted_completion_over = 1;
+                    } else {
+                        perror("getline");
+                    }
+
                     free(line);
                     return NULL;
+
+                } else {
+                    // check for trailing new line and remove it
+                    if (line[nread - 1] == '\n') {
+                        line[nread - 1] = '\0';
+                    }
                 }
-                line[len - 1] = '\0';
 
                 char **result = malloc(2 * sizeof(char *));
+                if (!result) {
+                    perror("malloc failed");
+                    return NULL;
+                }
                 result[0] = line;
                 result[1] = NULL;
 
