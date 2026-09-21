@@ -67,6 +67,7 @@ redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 char *command_generator(const char *text, int state);
+char **execute_completion_script(char *arg_1, char *arg_2, char *arg_3);
 char **my_completion(const char *text, int start, int end);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
@@ -598,6 +599,65 @@ char *command_generator(const char *text, int state) {
     return NULL;
 }
 
+/* arg_1 -> the command name being completed
+ * arg_2 -> the word currently being completed
+ * arg_3 -> the word immediately before the word being completed
+ */
+char **execute_completion_script(char *arg_1, char *arg_2, char *arg_3) {
+    // search for command in Completions
+    for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
+        if (strcmp(Completions_registered[i].command, arg_1) == 0) {
+            FILE *fp = popen(Completions_registered[i].script_path, "r");
+            if (fp == NULL) {
+                perror("popen");
+                return NULL;
+            }
+
+            char *line = NULL;
+            size_t len = 0;
+            ssize_t nread = getline(&line, &len, fp);
+            if (nread == -1) {
+                if (feof(fp)) {
+                    // Prevent readline from using default filename completion
+                    rl_attempted_completion_over = 1;
+                } else {
+                    perror("getline");
+                }
+                free(line);
+                return NULL;
+            } else {
+                // check for trailing new line and remove it
+                if (line[nread - 1] == '\n') {
+                    line[nread - 1] = '\0';
+                }
+
+                if (strncmp(arg_2, line, strlen(arg_2)) == 0) {
+                    char **result = malloc(2 * sizeof(char *));
+                    if (!result) {
+                        perror("malloc failed");
+                        return NULL;
+                    }
+                    result[0] = line;
+                    result[1] = NULL;
+
+                    int exit_status = pclose(fp);
+                    if (exit_status == -1) {
+                        perror("pclose");
+                        free(result);
+                        free(line);
+                        return NULL;
+                    }
+
+                    return result;
+                } else {
+                    return NULL;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 /* Custom completion function for GNU readline (set via
  * rl_attempted_completion_function). Called once per completion attempt with
  * the full line context: `text` is the word being completed, `start`/`end` are
@@ -615,62 +675,31 @@ char **my_completion(const char *text, int start, int end) {
             return NULL;
         }
 
-        char *command_name = strtok(line_buffer_copy, " \t");
+        int n_args = 0;
+        char *argv[MAX_ARGS];
 
-        // search for command_name in Completions
-        for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
-            if (strcmp(Completions_registered[i].command, command_name) == 0) {
-                free(line_buffer_copy);
-
-                FILE *fp = popen(Completions_registered[i].script_path, "r");
-                if (fp == NULL) {
-                    perror("popen");
-                    return NULL;
-                }
-
-                char *line = NULL;
-                size_t len = 0;
-                ssize_t nread = getline(&line, &len, fp);
-                if (nread == -1) {
-                    if (feof(fp)) {
-                        /* Prevent readline from using default filename
-                         * completion */
-                        rl_attempted_completion_over = 1;
-                    } else {
-                        perror("getline");
-                    }
-
-                    free(line);
-                    return NULL;
-
-                } else {
-                    // check for trailing new line and remove it
-                    if (line[nread - 1] == '\n') {
-                        line[nread - 1] = '\0';
-                    }
-                }
-
-                char **result = malloc(2 * sizeof(char *));
-                if (!result) {
-                    perror("malloc failed");
-                    return NULL;
-                }
-                result[0] = line;
-                result[1] = NULL;
-
-                int exit_status = pclose(fp);
-                if (exit_status == -1) {
-                    perror("pclose");
-                    free(result);
-                    free(line);
-                    return NULL;
-                }
-
-                return result;
-            }
+        char *token = strtok(line_buffer_copy, " \t");
+        while (token != NULL) {
+            argv[n_args++] = token;
+            token = strtok(NULL, " \t");
         }
 
+        char *arg_1 = argv[0];
+        char *arg_2;
+        char *arg_3;
+
+        if (strcmp(text, argv[1]) == 0) {
+            arg_3 = "";
+            arg_2 = argv[1];
+        } else {
+            arg_3 = argv[1];
+            arg_2 = argv[2];
+        }
+
+        char **result = execute_completion_script(arg_1, arg_2, arg_3);
         free(line_buffer_copy);
+        return result;
     }
+
     return NULL;
 }
