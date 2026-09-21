@@ -67,7 +67,8 @@ redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 char *command_generator(const char *text, int state);
-char **execute_completion_script(char *arg_1, char *arg_2, char *arg_3);
+char **run_completer(const char *completer_path, const char *command,
+                     const char *partial_word, const char *prev_word);
 char **my_completion(const char *text, int start, int end);
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
@@ -599,63 +600,98 @@ char *command_generator(const char *text, int state) {
     return NULL;
 }
 
-/* arg_1 -> the command name being completed
- * arg_2 -> the word currently being completed
- * arg_3 -> the word immediately before the word being completed
+/*
+ * Invoke a program completer and return its stdout as a list of lines.
+ *
+ * @param completer_path  path to the completer binary (e.g.
+ * "/usr/bin/my_completer")
+ * @param command         argv[1] — the command being completed (e.g. "git")
+ * @param partial_word    argv[2] — the word at the cursor (e.g. "ch")
+ * @param prev_word       argv[3] — word before the partial (e.g. "" if none)
+ * @return malloc'd array of strings (NULL-terminated), or NULL on failure.
  */
-char **execute_completion_script(char *arg_1, char *arg_2, char *arg_3) {
-    // search for command in Completions
-    for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
-        if (strcmp(Completions_registered[i].command, arg_1) == 0) {
-            FILE *fp = popen(Completions_registered[i].script_path, "r");
-            if (fp == NULL) {
-                perror("popen");
-                return NULL;
-            }
-
-            char *line = NULL;
-            size_t len = 0;
-            ssize_t nread = getline(&line, &len, fp);
-            if (nread == -1) {
-                if (feof(fp)) {
-                    // Prevent readline from using default filename completion
-                    rl_attempted_completion_over = 1;
-                } else {
-                    perror("getline");
-                }
-                free(line);
-                return NULL;
-            } else {
-                // check for trailing new line and remove it
-                if (line[nread - 1] == '\n') {
-                    line[nread - 1] = '\0';
-                }
-
-                if (strncmp(arg_2, line, strlen(arg_2)) == 0) {
-                    char **result = malloc(2 * sizeof(char *));
-                    if (!result) {
-                        perror("malloc failed");
-                        return NULL;
-                    }
-                    result[0] = line;
-                    result[1] = NULL;
-
-                    int exit_status = pclose(fp);
-                    if (exit_status == -1) {
-                        perror("pclose");
-                        free(result);
-                        free(line);
-                        return NULL;
-                    }
-
-                    return result;
-                } else {
-                    return NULL;
-                }
-            }
-        }
+char **run_completer(const char *completer_path, const char *command,
+                     const char *partial_word, const char *prev_word) {
+    int pipefd[2]; // pipefd[0] refers to the read end of the pipe.
+                   // pipefd[1] refers to the write end of the pipe.
+    if (pipe(pipefd) == -1) {
+        return NULL;
     }
-    return NULL;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return NULL;
+    }
+
+    if (pid == 0) {
+        /* ---- Child ---- */
+        close(pipefd[0]);               // close read end
+        dup2(pipefd[1], STDOUT_FILENO); // stdout -> pipe
+        close(pipefd[1]);               // close original write end
+
+        /* Build argv */
+        char *argv[] = {(char *)completer_path, (char *)command,
+                        (char *)partial_word, (char *)prev_word, NULL};
+
+        execv(completer_path, argv);
+        _exit(127); // execv failed
+    }
+
+    /* ---- Parent ---- */
+    close(pipefd[1]); // close write end so read() can see EOF
+
+    FILE *fp = fdopen(pipefd[0], "r");
+    if (!fp) {
+        return NULL;
+    }
+
+    /* Starts as NULL/0 so getline allocates on first call */
+    char *line = NULL;
+    size_t line_cap = 0;
+
+    char **result = NULL;
+    size_t count = 0, cap = 0;
+    ssize_t n;
+
+    while ((n = getline(&line, &line_cap, fp)) != -1) {
+        /* Strip trailing newline */
+        if (n > 0 && line[n - 1] == '\n') {
+            line[n - 1] = '\0';
+        }
+
+        /* Skip empty lines */
+        if (n == 1) {
+            free(line);
+            line = NULL;
+            line_cap = 0;
+            continue;
+        }
+
+        /* Grow the result array */
+        if (count == cap) {
+            cap = cap ? cap * 2 : 8;
+            result = realloc(result, sizeof(char *) * (cap + 1));
+        }
+
+        /* Take ownership of getline's buffer for this line */
+        result[count++] = line;
+        line = NULL; /* force getline to allocate fresh next iteration */
+        line_cap = 0;
+    }
+
+    free(line);
+    fclose(fp); /* closes pipefd[0] too */
+
+    int status;
+    waitpid(pid, &status, 0);
+
+    if (result) {
+        result[count] = NULL;
+    }
+
+    return result;
 }
 
 /* Custom completion function for GNU readline (set via
@@ -669,36 +705,47 @@ char **my_completion(const char *text, int start, int end) {
     if (start == 0) {
         return rl_completion_matches(text, command_generator);
     } else {
-        char *line_buffer_copy = strdup(rl_line_buffer);
-        if (line_buffer_copy == NULL) {
-            perror("strdup");
-            return NULL;
+        /* Extract first word (the command) */
+        char first_word[MAX_CMD_LEN] = "";
+        for (int i = 0; rl_line_buffer[i] && rl_line_buffer[i] != ' ' &&
+                        i < MAX_CMD_LEN - 1;
+             i++) {
+            first_word[i] = rl_line_buffer[i];
         }
 
-        int n_args = 0;
-        char *argv[MAX_ARGS];
-
-        char *token = strtok(line_buffer_copy, " \t");
-        while (token != NULL) {
-            argv[n_args++] = token;
-            token = strtok(NULL, " \t");
+        /* Previous word: skip spaces leftward, then walk the word */
+        char prev_word[MAX_CMD_LEN] = "";
+        int j = start - 1;
+        while (j > 0 && rl_line_buffer[j] == ' ') {
+            j--;
+        }
+        int end = j;
+        while (j > 0 && rl_line_buffer[j - 1] != ' ') {
+            j--;
+        }
+        int len = end - j + 1;
+        if (len > 0 && j != 0) {
+            if (len >= MAX_CMD_LEN) {
+                len = MAX_CMD_LEN - 1;
+            }
+            memcpy(prev_word, rl_line_buffer + j, len);
+            prev_word[len] = '\0';
         }
 
-        char *arg_1 = argv[0];
-        char *arg_2;
-        char *arg_3;
+        /* Look up and invoke */
+        for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
+            if (strcmp(Completions_registered[i].command, first_word) == 0) {
+                char **results =
+                    run_completer(Completions_registered[i].script_path,
+                                  first_word, text, prev_word);
+                if (results) {
+                    return results;
+                }
 
-        if (strcmp(text, argv[1]) == 0) {
-            arg_3 = "";
-            arg_2 = argv[1];
-        } else {
-            arg_3 = argv[1];
-            arg_2 = argv[2];
+                rl_attempted_completion_over = 1;
+                break;
+            }
         }
-
-        char **result = execute_completion_script(arg_1, arg_2, arg_3);
-        free(line_buffer_copy);
-        return result;
     }
 
     return NULL;
