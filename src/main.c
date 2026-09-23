@@ -71,6 +71,8 @@ char **run_completer(const char *completer_path, const char *command,
                      const char *partial_word, const char *prev_word);
 char **my_completion(const char *text, int start, int end);
 
+extern char **environ;
+
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
                               {"cd", do_cd},     {"complete", do_complete},
@@ -635,7 +637,7 @@ char **run_completer(const char *completer_path, const char *command,
         char *argv[] = {(char *)completer_path, (char *)command,
                         (char *)partial_word, (char *)prev_word, NULL};
 
-        execv(completer_path, argv);
+        execve(completer_path, argv, environ);
         _exit(127); // execv failed
     }
 
@@ -735,6 +737,18 @@ char **my_completion(const char *text, int start, int end) {
         /* Look up and invoke */
         for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
             if (strcmp(Completions_registered[i].command, first_word) == 0) {
+                rl_attempted_completion_over = 1;
+
+                char comp_point[1024];
+                if ((snprintf(comp_point, sizeof(comp_point), "%d", start)) <
+                    0) {
+                    return NULL;
+                }
+                if ((setenv("COMP_POINT", comp_point, 0) == -1) ||
+                    (setenv("COMP_LINE", rl_line_buffer, 0) == -1)) {
+                    return NULL;
+                }
+
                 char **results =
                     run_completer(Completions_registered[i].script_path,
                                   first_word, text, prev_word);
@@ -742,7 +756,6 @@ char **my_completion(const char *text, int start, int end) {
                     return results;
                 }
 
-                rl_attempted_completion_over = 1;
                 break;
             }
         }
