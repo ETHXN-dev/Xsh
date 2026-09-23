@@ -726,7 +726,7 @@ char **my_completion(const char *text, int start, int end) {
             j--;
         }
         int len = end - j + 1;
-        if (len > 0 && j != 0) {
+        if (len > 0) {
             if (len >= MAX_CMD_LEN) {
                 len = MAX_CMD_LEN - 1;
             }
