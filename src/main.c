@@ -740,7 +740,7 @@ char **my_completion(const char *text, int start, int end) {
                 rl_attempted_completion_over = 1;
 
                 char comp_point[1024];
-                if ((snprintf(comp_point, sizeof(comp_point), "%d", start)) <
+                if ((snprintf(comp_point, sizeof(comp_point), "%d", rl_point)) <
                     0) {
                     return NULL;
                 }
