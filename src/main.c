@@ -67,11 +67,15 @@ redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 char *command_generator(const char *text, int state);
+char *completer_generator(const char *text, int state);
 char **run_completer(const char *completer_path, const char *command,
                      const char *partial_word, const char *prev_word);
 char **my_completion(const char *text, int start, int end);
 
 extern char **environ;
+
+/* Global to hold the last run_completer results */
+char **completer_results;
 
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
@@ -602,6 +606,19 @@ char *command_generator(const char *text, int state) {
     return NULL;
 }
 
+char *completer_generator(const char *text, int state) {
+    static int cached_count;
+    if (state == 0) {
+        cached_count = 0;
+        while (completer_results[cached_count])
+            cached_count++;
+    }
+    if (state < cached_count) {
+        return completer_results[state];
+    }
+    return NULL;
+}
+
 /*
  * Invoke a program completer and return its stdout as a list of lines.
  *
@@ -749,11 +766,15 @@ char **my_completion(const char *text, int start, int end) {
                     return NULL;
                 }
 
-                char **results =
+                completer_results =
                     run_completer(Completions_registered[i].script_path,
                                   first_word, text, prev_word);
-                if (results) {
-                    return results;
+                if (completer_results) {
+                    char **result =
+                        rl_completion_matches(text, completer_generator);
+                    free(completer_results); /* free the array of pointers, NOT
+                                             the strings */
+                    return result;
                 }
 
                 break;
