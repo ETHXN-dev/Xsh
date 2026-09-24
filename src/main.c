@@ -270,6 +270,18 @@ void do_complete(char *argv[]) {
 
         strncpy(Completions_registered[idx].script_path, script_path, PATH_MAX);
         Completions_registered[idx].script_path[PATH_MAX - 1] = '\0';
+    } else if (strcmp(argv[1], "-r") == 0) {
+        if (argv[2] == NULL) {
+            return;
+        }
+
+        char *command = argv[2];
+        for (int i = 0; Completions_registered[i].command[0] != '\0'; i++) {
+            if (strcmp(command, Completions_registered[i].command) == 0) {
+                Completions_registered[i].command[0] = '\0';
+                return;
+            }
+        }
     }
 }
 
