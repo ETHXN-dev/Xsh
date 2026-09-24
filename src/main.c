@@ -761,8 +761,8 @@ char **my_completion(const char *text, int start, int end) {
                     0) {
                     return NULL;
                 }
-                if ((setenv("COMP_POINT", comp_point, 0) == -1) ||
-                    (setenv("COMP_LINE", rl_line_buffer, 0) == -1)) {
+                if ((setenv("COMP_POINT", comp_point, 1) == -1) ||
+                    (setenv("COMP_LINE", rl_line_buffer, 1) == -1)) {
                     return NULL;
                 }
 
