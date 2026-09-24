@@ -56,6 +56,7 @@ void do_type(char *argv[]);
 void do_pwd(char *argv[]);
 void do_cd(char *argv[]);
 void do_complete(char *argv[]);
+void do_jobs(char *argv[]);
 
 int tokenize(char *args[], char *buf);
 void print_tokenize_error(int err);
@@ -80,7 +81,7 @@ char **completer_results;
 builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
                               {"type", do_type}, {"pwd", do_pwd},
                               {"cd", do_cd},     {"complete", do_complete},
-                              {NULL, NULL}};
+                              {"jobs", do_jobs}, {NULL, NULL}};
 
 redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
                                     {"1>", STDOUT_FILENO, false},
@@ -284,6 +285,8 @@ void do_complete(char *argv[]) {
         }
     }
 }
+
+void do_jobs(char *argv[]) { return; }
 
 /*
  * tokenize: splits buf into whitespace-separated tokens, honoring
