@@ -488,7 +488,7 @@ void run_external_program(char *argv[], bool wait) {
             waitpid(pid, &status, 0);
         } else {
             static int job_number = 1;
-            printf("[%d] %d\n", job_number, getpid());
+            printf("[%d] %d\n", job_number, pid);
         }
     }
 
