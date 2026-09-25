@@ -61,7 +61,7 @@ void do_jobs(char *argv[]);
 int tokenize(char *args[], char *buf);
 void print_tokenize_error(int err);
 char *get_path(char *command);
-void run_external_program(char *argv[]);
+void run_external_program(char *argv[], bool wait);
 void execute_command(char *argv[]);
 
 redirect_type_t *classify_redirect(const char *s);
@@ -119,6 +119,13 @@ int main(void) {
         if (arg_count < 0) {
             print_tokenize_error(arg_count);
             free(inputs);
+            continue;
+        }
+
+        /* Handle background jobs */
+        if (strcmp(arguments[arg_count - 1], "&") == 0) {
+            arguments[arg_count - 1] = NULL;
+            run_external_program(arguments, false);
             continue;
         }
 
@@ -451,7 +458,7 @@ char *get_path(char *command) {
     return full_path;
 }
 
-void run_external_program(char *argv[]) {
+void run_external_program(char *argv[], bool wait) {
     char *full_path = get_path(argv[0]);
     if (full_path == NULL) {
         fprintf(stderr, "%s: command not found\n", argv[0]);
@@ -475,9 +482,14 @@ void run_external_program(char *argv[]) {
         exit(127);
     } else {
         // inside the parent process
-        int status;
-        /* wait for the child process to finish running */
-        waitpid(pid, &status, 0);
+        if (wait) {
+            int status;
+            /* wait for the child process to finish running */
+            waitpid(pid, &status, 0);
+        } else {
+            static int job_number = 1;
+            printf("[%d] %d\n", job_number, getpid());
+        }
     }
 
     free(full_path);
@@ -491,7 +503,7 @@ void execute_command(char *argv[]) {
         }
     }
 
-    run_external_program(argv);
+    run_external_program(argv, true);
 }
 
 redirect_type_t *classify_redirect(const char *s) {
