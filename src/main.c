@@ -15,6 +15,7 @@
 #define MAX_ARGS 256
 #define MAX_CMD_LEN 1024
 #define MAX_COMPLETIONS 1024
+#define MAX_JOBS 1024
 
 #define IS_DOT_OR_DOTDOT(s)                                                    \
     (s[0] == '.' && ((s[1] == '\0') || (s[1] == '.' && s[2] == '\0')))
@@ -50,6 +51,13 @@ typedef struct {
     char script_path[PATH_MAX];
 } completion_register_t;
 
+typedef struct {
+    int job_number;
+    pid_t pid;
+    char command_string[MAX_CMD_LEN * MAX_ARGS];
+    bool running_status;
+} Job;
+
 void do_exit(char *argv[]);
 void do_echo(char *argv[]);
 void do_type(char *argv[]);
@@ -61,7 +69,7 @@ void do_jobs(char *argv[]);
 int tokenize(char *args[], char *buf);
 void print_tokenize_error(int err);
 char *get_path(char *command);
-void run_external_program(char *argv[], bool wait);
+void run_external_program(char *argv[], bool background);
 void execute_command(char *argv[]);
 
 redirect_type_t *classify_redirect(const char *s);
@@ -97,6 +105,9 @@ redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
  */
 completion_register_t Completions_registered[MAX_COMPLETIONS];
 
+int Job_count = 1;
+Job Running_jobs[MAX_JOBS];
+
 int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
@@ -107,6 +118,12 @@ int main(void) {
         char *inputs = readline("$ ");
         if (inputs == NULL) {
             exit(EXIT_SUCCESS);
+        }
+
+        char *command_run = strdup(inputs);
+        if (command_run == NULL) {
+            perror("strdup");
+            exit(EXIT_FAILURE);
         }
 
         char *arguments[MAX_ARGS];
@@ -124,8 +141,16 @@ int main(void) {
 
         /* Handle background jobs */
         if (strcmp(arguments[arg_count - 1], "&") == 0) {
+            Running_jobs[Job_count].job_number = Job_count;
+            Running_jobs[Job_count].running_status = true;
+
+            strncpy(Running_jobs[Job_count].command_string, command_run,
+                    (MAX_CMD_LEN * MAX_ARGS));
+            Running_jobs[Job_count]
+                .command_string[(MAX_CMD_LEN * MAX_ARGS) - 1] = '\0';
+
             arguments[arg_count - 1] = NULL;
-            run_external_program(arguments, false);
+            run_external_program(arguments, true);
             continue;
         }
 
@@ -293,7 +318,13 @@ void do_complete(char *argv[]) {
     }
 }
 
-void do_jobs(char *argv[]) { return; }
+void do_jobs(char *argv[]) {
+    char marker = '+';
+
+    printf("[%d]%c %-24s%s\n", Job_count, marker, "Running",
+           Running_jobs[Job_count].command_string);
+    return;
+}
 
 /*
  * tokenize: splits buf into whitespace-separated tokens, honoring
@@ -458,7 +489,7 @@ char *get_path(char *command) {
     return full_path;
 }
 
-void run_external_program(char *argv[], bool wait) {
+void run_external_program(char *argv[], bool background) {
     char *full_path = get_path(argv[0]);
     if (full_path == NULL) {
         fprintf(stderr, "%s: command not found\n", argv[0]);
@@ -482,13 +513,14 @@ void run_external_program(char *argv[], bool wait) {
         exit(127);
     } else {
         // inside the parent process
-        if (wait) {
+        if (!background) {
             int status;
             /* wait for the child process to finish running */
             waitpid(pid, &status, 0);
         } else {
             static int job_number = 1;
             printf("[%d] %d\n", job_number, pid);
+            Running_jobs[Job_count].pid = pid;
         }
     }
 
@@ -503,7 +535,7 @@ void execute_command(char *argv[]) {
         }
     }
 
-    run_external_program(argv, true);
+    run_external_program(argv, false);
 }
 
 redirect_type_t *classify_redirect(const char *s) {
