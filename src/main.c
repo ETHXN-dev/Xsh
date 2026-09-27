@@ -320,14 +320,25 @@ void do_complete(char *argv[]) {
 }
 
 void do_jobs(char *argv[]) {
-    if (Job_count != 1) {
+    if (Job_count < 1) {
         return;
     }
 
-    char marker = '+';
+    for (int i = 1; i <= Job_count; i++) {
+        char marker;
 
-    printf("[%d]%c %-24s%s\n", Job_count, marker, "Running",
-           Running_jobs[Job_count].command_string);
+        if (i == Job_count) {
+            marker = '+';
+        } else if (i == Job_count - 1) {
+            marker = '-';
+        } else {
+            marker = ' ';
+        }
+
+        printf("[%d]%c %-24s%s\n", i, marker, "Running",
+               Running_jobs[i].command_string);
+    }
+
     return;
 }
 
@@ -523,8 +534,7 @@ void run_external_program(char *argv[], bool background) {
             /* wait for the child process to finish running */
             waitpid(pid, &status, 0);
         } else {
-            static int job_number = 1;
-            printf("[%d] %d\n", job_number, pid);
+            printf("[%d] %d\n", Job_count, pid);
             Running_jobs[Job_count].pid = pid;
         }
     }
