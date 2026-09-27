@@ -105,7 +105,7 @@ redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
  */
 completion_register_t Completions_registered[MAX_COMPLETIONS];
 
-int Job_count = 1;
+int Job_count = 0;
 Job Running_jobs[MAX_JOBS];
 
 int main(void) {
@@ -141,6 +141,7 @@ int main(void) {
 
         /* Handle background jobs */
         if (strcmp(arguments[arg_count - 1], "&") == 0) {
+            Job_count++;
             Running_jobs[Job_count].job_number = Job_count;
             Running_jobs[Job_count].running_status = true;
 
@@ -319,6 +320,10 @@ void do_complete(char *argv[]) {
 }
 
 void do_jobs(char *argv[]) {
+    if (Job_count != 1) {
+        return;
+    }
+
     char marker = '+';
 
     printf("[%d]%c %-24s%s\n", Job_count, marker, "Running",
