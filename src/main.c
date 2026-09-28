@@ -320,8 +320,18 @@ void do_complete(char *argv[]) {
 }
 
 void do_jobs(char *argv[]) {
+    static int n_running_jobs;
+
+    static bool has_value = false;
+    if (!has_value) {
+        n_running_jobs = Job_count;
+    }
+    has_value = true;
+
+    int count = 0, done_jobs = 0;
     for (int i = 1; i <= Job_count; i++) {
         if (Running_jobs[i].running_status) {
+            count++;
             char marker;
             bool is_running = true;
 
@@ -330,11 +340,12 @@ void do_jobs(char *argv[]) {
                 Running_jobs[i].pid) {
                 is_running = false;
                 Running_jobs[i].running_status = false;
+                done_jobs++;
             }
 
-            if (i == Job_count) {
+            if (count == n_running_jobs) {
                 marker = '+';
-            } else if (i == Job_count - 1) {
+            } else if (count == n_running_jobs - 1) {
                 marker = '-';
             } else {
                 marker = ' ';
@@ -350,6 +361,8 @@ void do_jobs(char *argv[]) {
                    Running_jobs[i].command_string);
         }
     }
+
+    n_running_jobs -= done_jobs;
 }
 
 /*
