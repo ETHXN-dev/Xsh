@@ -320,26 +320,31 @@ void do_complete(char *argv[]) {
 }
 
 void do_jobs(char *argv[]) {
-    if (Job_count < 1) {
-        return;
-    }
-
     for (int i = 1; i <= Job_count; i++) {
-        char marker;
+        if (Running_jobs[i].running_status) {
+            char marker;
+            bool is_running = true;
 
-        if (i == Job_count) {
-            marker = '+';
-        } else if (i == Job_count - 1) {
-            marker = '-';
-        } else {
-            marker = ' ';
+            int status;
+            if ((waitpid(Running_jobs[i].pid, &status, WNOHANG)) ==
+                Running_jobs[i].pid) {
+                is_running = false;
+                Running_jobs[i].running_status = false;
+            }
+
+            if (i == Job_count) {
+                marker = '+';
+            } else if (i == Job_count - 1) {
+                marker = '-';
+            } else {
+                marker = ' ';
+            }
+
+            printf("[%d]%c %-24s%s\n", i, marker,
+                   is_running ? "Running" : "Done",
+                   Running_jobs[i].command_string);
         }
-
-        printf("[%d]%c %-24s%s\n", i, marker, "Running",
-               Running_jobs[i].command_string);
     }
-
-    return;
 }
 
 /*
