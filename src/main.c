@@ -340,6 +340,11 @@ void do_jobs(char *argv[]) {
                 marker = ' ';
             }
 
+            if (!is_running) {
+                Running_jobs[i].command_string
+                    [strcspn(Running_jobs[i].command_string, "&") - 1] = '\0';
+            }
+
             printf("[%d]%c %-24s%s\n", i, marker,
                    is_running ? "Running" : "Done",
                    Running_jobs[i].command_string);
