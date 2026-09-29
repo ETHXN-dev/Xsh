@@ -116,6 +116,36 @@ int main(void) {
     rl_attempted_completion_function = my_completion;
 
     while (1) {
+        int count = 0, done_jobs = 0;
+        for (int i = 1; i <= Job_count; i++) {
+            if (Running_jobs[i].running_status) {
+                count++;
+                bool is_done = false;
+
+                int status;
+                if ((waitpid(Running_jobs[i].pid, &status, WNOHANG)) ==
+                    Running_jobs[i].pid) {
+                    is_done = true;
+                    Running_jobs[i].running_status = false;
+                    Running_jobs[i].command_string
+                        [strcspn(Running_jobs[i].command_string, "&") - 1] =
+                        '\0';
+                    done_jobs++;
+                }
+
+                char marker = (count == Running_jobs_count)       ? '+'
+                              : (count == Running_jobs_count - 1) ? '-'
+                                                                  : ' ';
+
+                if (is_done) {
+                    printf("[%d]%c %-24s%s\n", i, marker, "Done",
+                           Running_jobs[i].command_string);
+                }
+            }
+        }
+
+        Running_jobs_count -= done_jobs;
+
         char *inputs = readline("$ ");
         if (inputs == NULL) {
             exit(EXIT_SUCCESS);
