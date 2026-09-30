@@ -66,6 +66,13 @@ void do_cd(char *argv[]);
 void do_complete(char *argv[]);
 void do_jobs(char *argv[]);
 
+/*
+ * Checks current status of jobs
+ * bool display_all to determine whether to list all jobs or just those that are
+ * done
+ */
+void check_jobs(bool display_all);
+
 int tokenize(char *args[], char *buf);
 void print_tokenize_error(int err);
 char *get_path(char *command);
@@ -116,38 +123,7 @@ int main(void) {
     rl_attempted_completion_function = my_completion;
 
     while (1) {
-        int count = 0, done_jobs = 0, highest_job = 0;
-        for (int i = 1; i <= Highest_job_number; i++) {
-            if (Running_jobs[i].running_status) {
-                count++;
-                bool is_done = false;
-
-                int status;
-                if ((waitpid(Running_jobs[i].pid, &status, WNOHANG)) ==
-                    Running_jobs[i].pid) {
-                    is_done = true;
-                    Running_jobs[i].running_status = false;
-                    Running_jobs[i].command_string
-                        [strcspn(Running_jobs[i].command_string, "&") - 1] =
-                        '\0';
-                    done_jobs++;
-                } else {
-                    highest_job = i;
-                }
-
-                char marker = (count == Running_jobs_count)       ? '+'
-                              : (count == Running_jobs_count - 1) ? '-'
-                                                                  : ' ';
-
-                if (is_done) {
-                    printf("[%d]%c %-24s%s\n", i, marker, "Done",
-                           Running_jobs[i].command_string);
-                }
-            }
-        }
-
-        Running_jobs_count -= done_jobs;
-        Highest_job_number = highest_job;
+        check_jobs(false);
 
         char *inputs = readline("$ ");
         if (inputs == NULL) {
@@ -156,6 +132,7 @@ int main(void) {
 
         char *command_run = strdup(inputs);
         if (command_run == NULL) {
+            free(inputs);
             perror("strdup");
             exit(EXIT_FAILURE);
         }
@@ -165,11 +142,13 @@ int main(void) {
         int arg_count = tokenize(arguments, inputs);
         if (arg_count == 0) {
             free(inputs);
+            free(command_run);
             continue; // blank line, nothing to do
         }
         if (arg_count < 0) {
             print_tokenize_error(arg_count);
             free(inputs);
+            free(command_run);
             continue;
         }
 
@@ -183,9 +162,12 @@ int main(void) {
                     command_run, (MAX_CMD_LEN * MAX_ARGS));
             Running_jobs[Highest_job_number]
                 .command_string[(MAX_CMD_LEN * MAX_ARGS) - 1] = '\0';
+            free(command_run);
 
             arguments[arg_count - 1] = NULL;
             run_external_program(arguments, true);
+
+            free(inputs);
             continue;
         }
 
@@ -222,6 +204,7 @@ int main(void) {
             execute_command(arguments);
         }
         free(inputs);
+        free(command_run);
     }
 
     return 0;
@@ -353,42 +336,46 @@ void do_complete(char *argv[]) {
     }
 }
 
-void do_jobs(char *argv[]) {
-    int count = 0, done_jobs = 0;
+void do_jobs(char *argv[]) { check_jobs(true); }
+
+void check_jobs(bool display_all) {
+    int count = 0, done_jobs = 0, highest_job = 0;
     for (int i = 1; i <= Highest_job_number; i++) {
         if (Running_jobs[i].running_status) {
             count++;
-            char marker;
-            bool is_running = true;
+            bool is_done = false;
 
             int status;
             if ((waitpid(Running_jobs[i].pid, &status, WNOHANG)) ==
                 Running_jobs[i].pid) {
-                is_running = false;
+                is_done = true;
                 Running_jobs[i].running_status = false;
-                done_jobs++;
-            }
-
-            if (count == Running_jobs_count) {
-                marker = '+';
-            } else if (count == Running_jobs_count - 1) {
-                marker = '-';
-            } else {
-                marker = ' ';
-            }
-
-            if (!is_running) {
                 Running_jobs[i].command_string
                     [strcspn(Running_jobs[i].command_string, "&") - 1] = '\0';
+                done_jobs++;
+            } else {
+                highest_job = i;
             }
 
-            printf("[%d]%c %-24s%s\n", i, marker,
-                   is_running ? "Running" : "Done",
-                   Running_jobs[i].command_string);
+            char marker = (count == Running_jobs_count)       ? '+'
+                          : (count == Running_jobs_count - 1) ? '-'
+                                                              : ' ';
+
+            if (display_all) {
+                printf("[%d]%c %-24s%s\n", i, marker,
+                       is_done ? "Done" : "Running",
+                       Running_jobs[i].command_string);
+            } else {
+                if (is_done) {
+                    printf("[%d]%c %-24s%s\n", i, marker, "Done",
+                           Running_jobs[i].command_string);
+                }
+            }
         }
     }
 
     Running_jobs_count -= done_jobs;
+    Highest_job_number = highest_job;
 }
 
 /*
