@@ -336,7 +336,10 @@ void do_complete(char *argv[]) {
     }
 }
 
-void do_jobs(char *argv[]) { check_jobs(true); }
+void do_jobs(char *argv[]) {
+    usleep(10000); // 10 ms: give just-unblocked children time to exit
+    check_jobs(true);
+}
 
 void check_jobs(bool display_all) {
     int count = 0, done_jobs = 0, highest_job = 0;
@@ -642,10 +645,10 @@ void redirect_stream(char *argv[], char *filename, int stream, int append) {
 
 /* Completion generator for GNU readline's rl_completion_matches().
  * Readline calls this repeatedly with the same partial `text`,
- * incrementing `state` each time; state == 0 signals a new completion attempt,
- * so we reset our position in `builtins`.
- * Returns a strdup'd name of the next builtin whose name starts with `text`,
- * or NULL when no more matches remain. */
+ * incrementing `state` each time; state == 0 signals a new completion
+ * attempt, so we reset our position in `builtins`. Returns a strdup'd name
+ * of the next builtin whose name starts with `text`, or NULL when no more
+ * matches remain. */
 char *command_generator(const char *text, int state) {
     static int index;
     static size_t len;
@@ -736,7 +739,8 @@ char *completer_generator(const char *text, int state) {
  * "/usr/bin/my_completer")
  * @param command         argv[1] — the command being completed (e.g. "git")
  * @param partial_word    argv[2] — the word at the cursor (e.g. "ch")
- * @param prev_word       argv[3] — word before the partial (e.g. "" if none)
+ * @param prev_word       argv[3] — word before the partial (e.g. "" if
+ * none)
  * @return malloc'd array of strings (NULL-terminated), or NULL on failure.
  */
 char **run_completer(const char *completer_path, const char *command,
@@ -824,12 +828,12 @@ char **run_completer(const char *completer_path, const char *command,
 }
 
 /* Custom completion function for GNU readline (set via
- * rl_attempted_completion_function). Called once per completion attempt with
- * the full line context: `text` is the word being completed, `start`/`end` are
- * its offsets into rl_line_buffer. We only offer builtin-name completions when
- * the word being completed is the first word on the line (start == 0);
- * otherwise we return NULL so readline falls back to its default filename
- * completion. */
+ * rl_attempted_completion_function). Called once per completion attempt
+ * with the full line context: `text` is the word being completed,
+ * `start`/`end` are its offsets into rl_line_buffer. We only offer
+ * builtin-name completions when the word being completed is the first word
+ * on the line (start == 0); otherwise we return NULL so readline falls back
+ * to its default filename completion. */
 char **my_completion(const char *text, int start, int end) {
     if (start == 0) {
         return rl_completion_matches(text, command_generator);
@@ -882,8 +886,8 @@ char **my_completion(const char *text, int start, int end) {
                 if (completer_results) {
                     char **result =
                         rl_completion_matches(text, completer_generator);
-                    free(completer_results); /* free the array of pointers, NOT
-                                             the strings */
+                    free(completer_results); /* free the array of pointers,
+                                             NOT the strings */
                     return result;
                 }
 
