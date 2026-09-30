@@ -105,7 +105,7 @@ redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
  */
 completion_register_t Completions_registered[MAX_COMPLETIONS];
 
-int Job_count = 0;
+int Highest_job_number = 0;
 int Running_jobs_count = 0;
 Job Running_jobs[MAX_JOBS];
 
@@ -116,8 +116,8 @@ int main(void) {
     rl_attempted_completion_function = my_completion;
 
     while (1) {
-        int count = 0, done_jobs = 0;
-        for (int i = 1; i <= Job_count; i++) {
+        int count = 0, done_jobs = 0, highest_job = 0;
+        for (int i = 1; i <= Highest_job_number; i++) {
             if (Running_jobs[i].running_status) {
                 count++;
                 bool is_done = false;
@@ -131,6 +131,8 @@ int main(void) {
                         [strcspn(Running_jobs[i].command_string, "&") - 1] =
                         '\0';
                     done_jobs++;
+                } else {
+                    highest_job = i;
                 }
 
                 char marker = (count == Running_jobs_count)       ? '+'
@@ -145,6 +147,7 @@ int main(void) {
         }
 
         Running_jobs_count -= done_jobs;
+        Highest_job_number = highest_job;
 
         char *inputs = readline("$ ");
         if (inputs == NULL) {
@@ -172,13 +175,13 @@ int main(void) {
 
         /* Handle background jobs */
         if (strcmp(arguments[arg_count - 1], "&") == 0) {
-            Job_count++, Running_jobs_count++;
-            Running_jobs[Job_count].job_number = Job_count;
-            Running_jobs[Job_count].running_status = true;
+            Highest_job_number++, Running_jobs_count++;
+            Running_jobs[Highest_job_number].job_number = Highest_job_number;
+            Running_jobs[Highest_job_number].running_status = true;
 
-            strncpy(Running_jobs[Job_count].command_string, command_run,
-                    (MAX_CMD_LEN * MAX_ARGS));
-            Running_jobs[Job_count]
+            strncpy(Running_jobs[Highest_job_number].command_string,
+                    command_run, (MAX_CMD_LEN * MAX_ARGS));
+            Running_jobs[Highest_job_number]
                 .command_string[(MAX_CMD_LEN * MAX_ARGS) - 1] = '\0';
 
             arguments[arg_count - 1] = NULL;
@@ -352,7 +355,7 @@ void do_complete(char *argv[]) {
 
 void do_jobs(char *argv[]) {
     int count = 0, done_jobs = 0;
-    for (int i = 1; i <= Job_count; i++) {
+    for (int i = 1; i <= Highest_job_number; i++) {
         if (Running_jobs[i].running_status) {
             count++;
             char marker;
@@ -580,8 +583,8 @@ void run_external_program(char *argv[], bool background) {
             /* wait for the child process to finish running */
             waitpid(pid, &status, 0);
         } else {
-            printf("[%d] %d\n", Job_count, pid);
-            Running_jobs[Job_count].pid = pid;
+            printf("[%d] %d\n", Highest_job_number, pid);
+            Running_jobs[Highest_job_number].pid = pid;
         }
     }
 
