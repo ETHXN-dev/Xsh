@@ -659,7 +659,6 @@ void handle_piping(char *argv[], int pipe_char_index) {
         close(pipefd[1]); // close write end so read() can see EOF
 
         int status;
-        waitpid(pid, &status, 0);
 
         int pid2 = fork();
         if (pid2 == -1) {
