@@ -78,6 +78,7 @@ void print_tokenize_error(int err);
 char *get_path(char *command);
 void run_external_program(char *argv[], bool background);
 void execute_command(char *argv[]);
+void handle_piping(char *argv[], int pipe_char_index);
 
 redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
@@ -147,6 +148,30 @@ int main(void) {
         }
         if (arg_count < 0) {
             print_tokenize_error(arg_count);
+            free(inputs);
+            free(command_run);
+            continue;
+        }
+
+        int pipe_char_index = 0;
+        for (int i = 0; i < arg_count; i++) {
+            if (strcmp(arguments[i], "|") == 0) {
+                /* Handle improper piping usage */
+                if (i == 0) {
+                    pipe_char_index = -1;
+                    fprintf(stderr, "syntax error near unexpected token `|'\n");
+                    break;
+                } else if (arguments[i + 1] == NULL) {
+                    pipe_char_index = -1;
+                    break;
+                }
+
+                pipe_char_index = i;
+                handle_piping(arguments, pipe_char_index);
+            }
+        }
+
+        if ((pipe_char_index == -1) || (pipe_char_index > 0)) {
             free(inputs);
             free(command_run);
             continue;
@@ -590,6 +615,72 @@ void execute_command(char *argv[]) {
     }
 
     run_external_program(argv, false);
+}
+
+void handle_piping(char *argv[], int pipe_char_index) {
+    char *first_command[MAX_ARGS] = {NULL};
+    char *second_command[MAX_ARGS] = {NULL};
+
+    /* Initialize command array for first command */
+    for (int i = 0; i < pipe_char_index; i++) {
+        first_command[i] = argv[i];
+    }
+
+    /* Initialize command array for second command */
+    for (int i = pipe_char_index + 1, count = 0; argv[i] != NULL; i++) {
+        second_command[count++] = argv[i];
+    }
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+
+    int pid = fork();
+    if (pid == -1) { // fork failed
+        perror("fork");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return;
+    } else if (pid == 0) { // Child process for first command
+        close(pipefd[0]);  // close read end
+
+        // redirect STDOUT of first command to write end
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+            perror("dup2");
+            return;
+        }
+        close(pipefd[1]);
+
+        execvp(first_command[0], first_command);
+        _exit(127);
+    } else {              // parent process
+        close(pipefd[1]); // close write end so read() can see EOF
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        int pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            return;
+        } else if (pid == 0) {
+            if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+                perror("dup2");
+                return;
+            }
+            close(pipefd[0]);
+
+            execvp(second_command[0], second_command);
+
+            _exit(127);
+        } else {
+            close(pipefd[0]);
+            int status;
+            waitpid(pid, &status, 0);
+        }
+    }
 }
 
 redirect_type_t *classify_redirect(const char *s) {
