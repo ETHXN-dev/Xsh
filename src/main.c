@@ -661,11 +661,11 @@ void handle_piping(char *argv[], int pipe_char_index) {
         int status;
         waitpid(pid, &status, 0);
 
-        int pid = fork();
-        if (pid == -1) {
+        int pid2 = fork();
+        if (pid2 == -1) {
             perror("fork");
             return;
-        } else if (pid == 0) {
+        } else if (pid2 == 0) {
             if (dup2(pipefd[0], STDIN_FILENO) == -1) {
                 perror("dup2");
                 return;
@@ -679,6 +679,7 @@ void handle_piping(char *argv[], int pipe_char_index) {
             close(pipefd[0]);
             int status;
             waitpid(pid, &status, 0);
+            waitpid(pid2, &status, 0);
         }
     }
 }
