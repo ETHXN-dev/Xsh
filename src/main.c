@@ -27,24 +27,24 @@ typedef enum {
     IN_SINGLE_QUOTE,
     IN_DOUBLE_QUOTE,
     ESCAPING
-} state_t;
+} TokenizerState;
 
 typedef enum {
     TOKENIZE_ERR_TOO_MANY_ARGS = -1,
     TOKENIZE_ERR_UNTERMINATED_QUOTE = -2,
     TOKENIZE_ERR_TRAILING_ESCAPE = -3,
-} tokenize_err_t;
+} TokenizeErr;
 
 typedef struct {
     char *name;
     int fd;
     bool append;
-} redirect_type_t;
+} RedirectType;
 
 typedef struct {
     char *name;
     builtin_func func;
-} builtin_command;
+} Builtin;
 
 typedef struct {
     char command[MAX_CMD_LEN];
@@ -81,7 +81,7 @@ void execute_command(char *argv[]);
 void handle_piping(char *argv[], int pipe_char_index);
 void run_in_child(char *argv[]);
 
-redirect_type_t *classify_redirect(const char *s);
+RedirectType *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
 
 char *command_generator(const char *text, int state);
@@ -95,18 +95,18 @@ extern char **environ;
 /* Global to hold the last run_completer results */
 char **completer_results;
 
-builtin_command builtins[] = {{"exit", do_exit}, {"echo", do_echo},
-                              {"type", do_type}, {"pwd", do_pwd},
-                              {"cd", do_cd},     {"complete", do_complete},
-                              {"jobs", do_jobs}, {NULL, NULL}};
+Builtin builtins[] = {{"exit", do_exit}, {"echo", do_echo},
+                      {"type", do_type}, {"pwd", do_pwd},
+                      {"cd", do_cd},     {"complete", do_complete},
+                      {"jobs", do_jobs}, {NULL, NULL}};
 
-redirect_type_t redirect_types[] = {{">", STDOUT_FILENO, false},
-                                    {"1>", STDOUT_FILENO, false},
-                                    {"2>", STDERR_FILENO, false},
-                                    {">>", STDOUT_FILENO, true},
-                                    {"1>>", STDOUT_FILENO, true},
-                                    {"2>>", STDERR_FILENO, true},
-                                    {NULL, 0, false}};
+RedirectType redirect_types[] = {{">", STDOUT_FILENO, false},
+                                 {"1>", STDOUT_FILENO, false},
+                                 {"2>", STDERR_FILENO, false},
+                                 {">>", STDOUT_FILENO, true},
+                                 {"1>>", STDOUT_FILENO, true},
+                                 {"2>>", STDERR_FILENO, true},
+                                 {NULL, 0, false}};
 
 /* Stores completions entered by user.
  * Last slot is intentionally empty as a sentinel
@@ -194,7 +194,7 @@ int main(void) {
             continue;
         }
 
-        redirect_type_t *redirect = NULL;
+        RedirectType *redirect = NULL;
         char *filename = NULL;
         int idx;
         for (idx = 0; arguments[idx] != NULL; idx++) {
@@ -418,7 +418,7 @@ void check_jobs(bool display_all) {
 int tokenize(char *args[], char *buf) {
     int argc = 0;
 
-    state_t state = SEEKING;
+    TokenizerState state = SEEKING;
 
     while (isspace((unsigned)*buf))
         buf++;
@@ -690,7 +690,7 @@ void run_in_child(char *argv[]) {
     _exit(127);
 }
 
-redirect_type_t *classify_redirect(const char *s) {
+RedirectType *classify_redirect(const char *s) {
     for (int i = 0; redirect_types[i].name != NULL; i++) {
         if (strcmp(s, redirect_types[i].name) == 0) {
             return &redirect_types[i];
