@@ -79,6 +79,7 @@ char *get_path(char *command);
 void run_external_program(char *argv[], bool background);
 void execute_command(char *argv[]);
 void handle_piping(char *argv[], int pipe_char_index);
+void run_in_child(char *argv[]);
 
 redirect_type_t *classify_redirect(const char *s);
 void redirect_stream(char *argv[], char *filename, int stream, int append);
@@ -154,18 +155,15 @@ int main(void) {
         }
 
         int pipe_char_index = 0;
-        for (int i = 0; i < arg_count; i++) {
+        for (int i = 1; i < arg_count; i++) {
             if (strcmp(arguments[i], "|") == 0) {
                 /* Handle improper piping usage */
-                if (i == 0) {
+                if (arguments[i + 1] == NULL ||
+                    strcmp(arguments[i - 1], "|") == 0) {
                     pipe_char_index = -1;
                     fprintf(stderr, "syntax error near unexpected token `|'\n");
                     break;
-                } else if (arguments[i + 1] == NULL) {
-                    pipe_char_index = -1;
-                    break;
                 }
-
                 pipe_char_index = i;
                 handle_piping(arguments, pipe_char_index);
             }
@@ -653,8 +651,7 @@ void handle_piping(char *argv[], int pipe_char_index) {
         }
         close(pipefd[1]);
 
-        execvp(first_command[0], first_command);
-        _exit(127);
+        run_in_child(first_command);
     } else {              // parent process
         close(pipefd[1]); // close write end so read() can see EOF
 
@@ -671,9 +668,7 @@ void handle_piping(char *argv[], int pipe_char_index) {
             }
             close(pipefd[0]);
 
-            execvp(second_command[0], second_command);
-
-            _exit(127);
+            run_in_child(second_command);
         } else {
             close(pipefd[0]);
             int status;
@@ -681,6 +676,18 @@ void handle_piping(char *argv[], int pipe_char_index) {
             waitpid(pid2, &status, 0);
         }
     }
+}
+
+void run_in_child(char *argv[]) {
+    for (int i = 0; builtins[i].name != NULL; i++) {
+        if (strcmp(argv[0], builtins[i].name) == 0) {
+            builtins[i].func(argv);
+            _exit(0);
+        }
+    }
+    execvp(argv[0], argv);
+    fprintf(stderr, "%s: command not found\n", argv[0]);
+    _exit(127);
 }
 
 redirect_type_t *classify_redirect(const char *s) {
