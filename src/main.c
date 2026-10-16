@@ -130,11 +130,20 @@ int main(void) {
 
     rl_attempted_completion_function = my_completion;
 
+    const char *histfile = getenv("HISTFILE");
+    if (histfile != NULL) {
+        read_history(histfile);
+        Persisted_history = history_length;
+    }
+
     while (1) {
         check_jobs(false);
 
         char *inputs = readline("$ ");
         if (inputs == NULL) {
+            if (histfile) {
+                write_history(histfile);
+            }
             exit(EXIT_SUCCESS);
         }
         add_history(inputs);
@@ -371,7 +380,6 @@ void do_history(char *argv[]) {
     int i = 0;
 
     if (argv[1] != NULL) {
-
         if (strcmp(argv[1], "-r") == 0) {
             if (argv[2] == NULL) {
                 fprintf(stderr, "usage: history -r <file>\n");
