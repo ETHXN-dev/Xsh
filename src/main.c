@@ -122,6 +122,8 @@ int Highest_job_number = 0;
 int Running_jobs_count = 0;
 Job Running_jobs[MAX_JOBS];
 
+int Persisted_history = 0;
+
 int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
@@ -369,11 +371,31 @@ void do_history(char *argv[]) {
     int i = 0;
 
     if (argv[1] != NULL) {
+
         if (strcmp(argv[1], "-r") == 0) {
+            if (argv[2] == NULL) {
+                fprintf(stderr, "usage: history -r <file>\n");
+                return;
+            }
             read_history(argv[2]);
             return;
         } else if (strcmp(argv[1], "-w") == 0) {
+            if (argv[2] == NULL) {
+                fprintf(stderr, "usage: history -w <file>\n");
+                return;
+            }
             write_history(argv[2]);
+            return;
+        } else if (strcmp(argv[1], "-a") == 0) {
+            if (argv[2] == NULL) {
+                fprintf(stderr, "usage: history -a <file>\n");
+                return;
+            }
+            int new = history_length - Persisted_history;
+            if (new > 0) {
+                append_history(new, argv[2]);
+                Persisted_history = history_length;
+            }
             return;
         } else {
             i = history_length - atoi(argv[1]);
