@@ -78,7 +78,8 @@ void print_tokenize_error(int err);
 char *get_path(char *command);
 void run_external_program(char *argv[], bool background);
 void execute_command(char *argv[]);
-void handle_piping(char *argv[], int pipe_char_index);
+bool valid_pipeline(char *argv[]);
+void run_pipeline(char *argv[]);
 void run_in_child(char *argv[]);
 
 RedirectType *classify_redirect(const char *s);
@@ -154,22 +155,18 @@ int main(void) {
             continue;
         }
 
-        int pipe_char_index = 0;
+        bool has_pipe = false;
         for (int i = 1; i < arg_count; i++) {
-            if (strcmp(arguments[i], "|") == 0) {
-                /* Handle improper piping usage */
-                if (arguments[i + 1] == NULL ||
-                    strcmp(arguments[i - 1], "|") == 0) {
-                    pipe_char_index = -1;
-                    fprintf(stderr, "syntax error near unexpected token `|'\n");
-                    break;
-                }
-                pipe_char_index = i;
-                handle_piping(arguments, pipe_char_index);
+            if (strcmp(arguments[1], "|") == 0) {
+                has_pipe = true;
+                break;
             }
         }
 
-        if ((pipe_char_index == -1) || (pipe_char_index > 0)) {
+        if (has_pipe) {
+            if (valid_pipeline(arguments)) {
+                run_pipeline(arguments);
+            }
             free(inputs);
             free(command_run);
             continue;
@@ -615,66 +612,82 @@ void execute_command(char *argv[]) {
     run_external_program(argv, false);
 }
 
-void handle_piping(char *argv[], int pipe_char_index) {
-    char *first_command[MAX_ARGS] = {NULL};
-    char *second_command[MAX_ARGS] = {NULL};
-
-    /* Initialize command array for first command */
-    for (int i = 0; i < pipe_char_index; i++) {
-        first_command[i] = argv[i];
-    }
-
-    /* Initialize command array for second command */
-    for (int i = pipe_char_index + 1, count = 0; argv[i] != NULL; i++) {
-        second_command[count++] = argv[i];
-    }
-
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        return;
-    }
-
-    int pid = fork();
-    if (pid == -1) { // fork failed
-        perror("fork");
-        close(pipefd[0]);
-        close(pipefd[1]);
-        return;
-    } else if (pid == 0) { // Child process for first command
-        close(pipefd[0]);  // close read end
-
-        // redirect STDOUT of first command to write end
-        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
-            perror("dup2");
-            return;
+bool valid_pipeline(char *argv[]) {
+    for (int i = 1; argv[i] != NULL; i++) {
+        if (strcmp(argv[i], "|") == 0 &&
+            (argv[i + 1] == NULL || strcmp(argv[i - 1], "|") == 0)) {
+            fprintf(stderr, "syntax error near unexpected token `|'\n");
+            return false;
         }
-        close(pipefd[1]);
+    }
+    return true;
+}
 
-        run_in_child(first_command);
-    } else {              // parent process
-        close(pipefd[1]); // close write end so read() can see EOF
+void run_pipeline(char *argv[]) {
+    char **cmds[MAX_ARGS];
+    int ncmds = 0;
 
-        int status;
+    cmds[ncmds++] = &argv[0];
+    for (int i = 1; argv[i] != NULL; i++) {
+        if (strcmp(argv[i], "|") == 0) {
+            argv[i] = NULL;
+            cmds[ncmds++] = &argv[i + 1];
+        }
+    }
 
-        int pid2 = fork();
-        if (pid2 == -1) {
-            perror("fork");
-            return;
-        } else if (pid2 == 0) {
-            if (dup2(pipefd[0], STDIN_FILENO) == -1) {
-                perror("dup2");
-                return;
+    int pipes[MAX_ARGS][2];
+    int npipes = ncmds - 1;
+    for (int i = 0; i < npipes; i++) {
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe");
+            for (int j = 0; j < i; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
             }
-            close(pipefd[0]);
-
-            run_in_child(second_command);
-        } else {
-            close(pipefd[0]);
-            int status;
-            waitpid(pid, &status, 0);
-            waitpid(pid2, &status, 0);
+            return;
         }
+    }
+
+    pid_t pids[MAX_ARGS];
+    int forked = 0;
+
+    for (int i = 0; i < ncmds; i++) {
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            break;
+        } else if (pid == 0) {
+            if (i > 0 && dup2(pipes[i - 1][0], STDIN_FILENO) == -1) {
+                perror("dup2");
+                _exit(1);
+            }
+            if (i < ncmds - 1 && dup2(pipes[i][1], STDOUT_FILENO) == -1) {
+                perror("dup2");
+                _exit(1);
+            }
+
+            /* Child must close every pipe fd, or downstream readers
+             * never see EOF */
+            for (int j = 0; j < npipes; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            run_in_child(cmds[i]);
+        }
+
+        pids[forked++] = pid;
+    }
+
+    /* Parent closes all its copies so EOF propagates */
+    for (int i = 0; i < npipes; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+
+    for (int i = 0; i < forked; i++) {
+        int status;
+        waitpid(pids[i], &status, 0);
     }
 }
 
