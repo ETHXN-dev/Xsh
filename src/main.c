@@ -424,7 +424,17 @@ void do_history(char *argv[]) {
     }
 }
 
-void do_declare(char *argv[]) {}
+void do_declare(char *argv[]) {
+    if (argv[1] == NULL) {
+        return;
+    }
+
+    if (strcmp(argv[1], "-p") == 0) {
+        if (argv[2] != NULL) {
+            printf("declare: %s: not found\n", argv[2]);
+        }
+    }
+}
 
 void check_jobs(bool display_all) {
     int count = 0, done_jobs = 0, highest_job = 0;
