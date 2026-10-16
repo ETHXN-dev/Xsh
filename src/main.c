@@ -245,7 +245,13 @@ int main(void) {
     return 0;
 }
 
-void do_exit(char *argv[]) { exit(EXIT_SUCCESS); }
+void do_exit(char *argv[]) {
+    const char *histfile = getenv("HISTFILE");
+    if (histfile != NULL) {
+        write_history(histfile);
+    }
+    exit(EXIT_SUCCESS);
+}
 
 void do_echo(char *argv[]) {
     for (int i = 1; argv[i] != NULL; i++) {
