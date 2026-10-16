@@ -68,6 +68,7 @@ void do_cd(char *argv[]);
 void do_complete(char *argv[]);
 void do_jobs(char *argv[]);
 void do_history(char *argv[]);
+void do_declare(char *argv[]);
 
 /*
  * Checks current status of jobs
@@ -99,10 +100,11 @@ extern char **environ;
 /* Global to hold the last run_completer results */
 char **completer_results;
 
-Builtin builtins[] = {
-    {"exit", do_exit}, {"echo", do_echo},       {"type", do_type},
-    {"pwd", do_pwd},   {"cd", do_cd},           {"complete", do_complete},
-    {"jobs", do_jobs}, {"history", do_history}, {NULL, NULL}};
+Builtin builtins[] = {{"exit", do_exit},       {"echo", do_echo},
+                      {"type", do_type},       {"pwd", do_pwd},
+                      {"cd", do_cd},           {"complete", do_complete},
+                      {"jobs", do_jobs},       {"history", do_history},
+                      {"declare", do_declare}, {NULL, NULL}};
 
 RedirectType redirect_types[] = {{">", STDOUT_FILENO, false},
                                  {"1>", STDOUT_FILENO, false},
@@ -421,6 +423,8 @@ void do_history(char *argv[]) {
         printf("\t%d  %s\n", i + 1, list[i]->line);
     }
 }
+
+void do_declare(char *argv[]) {}
 
 void check_jobs(bool display_all) {
     int count = 0, done_jobs = 0, highest_job = 0;
