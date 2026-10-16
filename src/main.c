@@ -369,7 +369,12 @@ void do_history(char *argv[]) {
     int i = 0;
 
     if (argv[1] != NULL) {
-        i = history_length - atoi(argv[1]);
+        if (strcmp(argv[1], "-r") == 0) {
+            read_history(argv[2]);
+            return;
+        } else {
+            i = history_length - atoi(argv[1]);
+        }
     }
 
     HIST_ENTRY **list = history_list();
