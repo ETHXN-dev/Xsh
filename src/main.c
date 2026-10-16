@@ -65,6 +65,7 @@ void do_pwd(char *argv[]);
 void do_cd(char *argv[]);
 void do_complete(char *argv[]);
 void do_jobs(char *argv[]);
+void do_history(char *argv[]);
 
 /*
  * Checks current status of jobs
@@ -96,10 +97,10 @@ extern char **environ;
 /* Global to hold the last run_completer results */
 char **completer_results;
 
-Builtin builtins[] = {{"exit", do_exit}, {"echo", do_echo},
-                      {"type", do_type}, {"pwd", do_pwd},
-                      {"cd", do_cd},     {"complete", do_complete},
-                      {"jobs", do_jobs}, {NULL, NULL}};
+Builtin builtins[] = {
+    {"exit", do_exit}, {"echo", do_echo},       {"type", do_type},
+    {"pwd", do_pwd},   {"cd", do_cd},           {"complete", do_complete},
+    {"jobs", do_jobs}, {"history", do_history}, {NULL, NULL}};
 
 RedirectType redirect_types[] = {{">", STDOUT_FILENO, false},
                                  {"1>", STDOUT_FILENO, false},
@@ -360,6 +361,8 @@ void do_jobs(char *argv[]) {
     usleep(10000); // 10 ms: give just-unblocked children time to exit
     check_jobs(true);
 }
+
+void do_history(char *argv[]) {}
 
 void check_jobs(bool display_all) {
     int count = 0, done_jobs = 0, highest_job = 0;
