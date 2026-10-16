@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <readline/history.h>
 #include <readline/readline.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -121,9 +122,6 @@ int Highest_job_number = 0;
 int Running_jobs_count = 0;
 Job Running_jobs[MAX_JOBS];
 
-int HistoryCount = 0;
-char History[MAX_HISTORY][MAX_CMD_LEN];
-
 int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
@@ -137,6 +135,7 @@ int main(void) {
         if (inputs == NULL) {
             exit(EXIT_SUCCESS);
         }
+        add_history(inputs);
 
         char *command_run = strdup(inputs);
         if (command_run == NULL) {
@@ -144,8 +143,6 @@ int main(void) {
             perror("strdup");
             exit(EXIT_FAILURE);
         }
-        strncpy(History[HistoryCount++], command_run,
-                sizeof(char) * MAX_CMD_LEN);
 
         char *arguments[MAX_ARGS];
 
@@ -372,11 +369,12 @@ void do_history(char *argv[]) {
     int i = 0;
 
     if (argv[1] != NULL) {
-        i = HistoryCount - atoi(argv[1]);
+        i = history_length - atoi(argv[1]);
     }
 
-    for (; i < HistoryCount; i++) {
-        printf("\t%d  %s\n", i + 1, History[i]);
+    HIST_ENTRY **list = history_list();
+    for (; i < history_length; i++) {
+        printf("\t%d  %s\n", i + 1, list[i]->line);
     }
 }
 
