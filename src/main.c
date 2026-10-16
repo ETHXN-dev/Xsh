@@ -372,6 +372,9 @@ void do_history(char *argv[]) {
         if (strcmp(argv[1], "-r") == 0) {
             read_history(argv[2]);
             return;
+        } else if (strcmp(argv[1], "-w") == 0) {
+            write_history(argv[2]);
+            return;
         } else {
             i = history_length - atoi(argv[1]);
         }
