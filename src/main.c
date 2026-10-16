@@ -16,6 +16,7 @@
 #define MAX_CMD_LEN 1024
 #define MAX_COMPLETIONS 1024
 #define MAX_JOBS 1024
+#define MAX_HISTORY 1000
 
 #define IS_DOT_OR_DOTDOT(s)                                                    \
     (s[0] == '.' && ((s[1] == '\0') || (s[1] == '.' && s[2] == '\0')))
@@ -120,6 +121,9 @@ int Highest_job_number = 0;
 int Running_jobs_count = 0;
 Job Running_jobs[MAX_JOBS];
 
+int HistoryCount = 0;
+char History[MAX_HISTORY][MAX_CMD_LEN];
+
 int main(void) {
     // Flush after every printf
     setbuf(stdout, NULL);
@@ -140,6 +144,8 @@ int main(void) {
             perror("strdup");
             exit(EXIT_FAILURE);
         }
+        strncpy(History[HistoryCount++], command_run,
+                sizeof(char) * MAX_CMD_LEN);
 
         char *arguments[MAX_ARGS];
 
@@ -362,7 +368,11 @@ void do_jobs(char *argv[]) {
     check_jobs(true);
 }
 
-void do_history(char *argv[]) {}
+void do_history(char *argv[]) {
+    for (int i = 0; i < HistoryCount; i++) {
+        printf("\t%d  %s\n", i + 1, History[i]);
+    }
+}
 
 void check_jobs(bool display_all) {
     int count = 0, done_jobs = 0, highest_job = 0;
