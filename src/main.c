@@ -157,7 +157,7 @@ int main(void) {
 
         bool has_pipe = false;
         for (int i = 1; i < arg_count; i++) {
-            if (strcmp(arguments[1], "|") == 0) {
+            if (strcmp(arguments[i], "|") == 0) {
                 has_pipe = true;
                 break;
             }
