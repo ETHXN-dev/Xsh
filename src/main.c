@@ -369,7 +369,13 @@ void do_jobs(char *argv[]) {
 }
 
 void do_history(char *argv[]) {
-    for (int i = 0; i < HistoryCount; i++) {
+    int i = 0;
+
+    if (argv[1] != NULL) {
+        i = HistoryCount - atoi(argv[1]);
+    }
+
+    for (; i < HistoryCount; i++) {
         printf("\t%d  %s\n", i + 1, History[i]);
     }
 }
