@@ -455,7 +455,7 @@ void do_declare(char *argv[]) {
 
         if (name && value) {
             if (isdigit(name[0])) {
-                fprintf(stderr, "declare `%s=%s': not a valid identifier\n",
+                fprintf(stderr, "declare: `%s=%s': not a valid identifier\n",
                         name, value);
                 return;
             }
