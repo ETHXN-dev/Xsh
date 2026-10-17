@@ -457,7 +457,7 @@ void do_declare(char *argv[]) {
             int name_len = strlen(name);
 
             for (int i = 0; i < name_len; i++) {
-                if (!(isalnum(name[i]) || name[i] == '_')) {
+                if (isdigit(name[0]) || !(isalnum(name[i]) || name[i] == '_')) {
                     fprintf(stderr,
                             "declare: `%s=%s': not a valid identifier\n", name,
                             value);
