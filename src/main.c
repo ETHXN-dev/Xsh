@@ -454,10 +454,15 @@ void do_declare(char *argv[]) {
         char *value = strtok(NULL, "=");
 
         if (name && value) {
-            if (isdigit(name[0])) {
-                fprintf(stderr, "declare: `%s=%s': not a valid identifier\n",
-                        name, value);
-                return;
+            int name_len = strlen(name);
+
+            for (int i = 0; i < name_len; i++) {
+                if (!(isalnum(name[i]) || name[i] == '_')) {
+                    fprintf(stderr,
+                            "declare: `%s=%s': not a valid identifier\n", name,
+                            value);
+                    return;
+                }
             }
 
             for (int i = 0; i < VariableCount; i++) {
