@@ -454,6 +454,12 @@ void do_declare(char *argv[]) {
         char *value = strtok(NULL, "=");
 
         if (name && value) {
+            if (isdigit(name[0])) {
+                fprintf(stderr, "declare `%s=%s': not a valid identifier\n",
+                        name, value);
+                return;
+            }
+
             for (int i = 0; i < VariableCount; i++) {
                 if (strcmp(Variables[i].name, name) == 0) {
                     strcpy(Variables[i].value, value);
