@@ -18,6 +18,7 @@
 #define MAX_COMPLETIONS 1024
 #define MAX_JOBS 1024
 #define MAX_HISTORY 1000
+#define MAX_SHELL_VARIABLES 1024
 
 #define IS_DOT_OR_DOTDOT(s)                                                    \
     (s[0] == '.' && ((s[1] == '\0') || (s[1] == '.' && s[2] == '\0')))
@@ -59,6 +60,11 @@ typedef struct {
     char command_string[MAX_CMD_LEN * MAX_ARGS];
     bool running_status;
 } Job;
+
+typedef struct {
+    char name[1024];
+    char value[1024];
+} ShellVariable;
 
 void do_exit(char *argv[]);
 void do_echo(char *argv[]);
@@ -113,6 +119,9 @@ RedirectType redirect_types[] = {{">", STDOUT_FILENO, false},
                                  {"1>>", STDOUT_FILENO, true},
                                  {"2>>", STDERR_FILENO, true},
                                  {NULL, 0, false}};
+
+int VariableCount = 0;
+ShellVariable Variables[MAX_SHELL_VARIABLES];
 
 /* Stores completions entered by user.
  * Last slot is intentionally empty as a sentinel
@@ -431,7 +440,29 @@ void do_declare(char *argv[]) {
 
     if (strcmp(argv[1], "-p") == 0) {
         if (argv[2] != NULL) {
+            for (int i = 0; i < VariableCount; i++) {
+                if (strcmp(Variables[i].name, argv[2]) == 0) {
+                    printf("declare -- %s=\"%s\"\n", argv[2],
+                           Variables[i].value);
+                    return;
+                }
+            }
             printf("declare: %s: not found\n", argv[2]);
+        }
+    } else {
+        char *name = strtok(argv[1], "=");
+        char *value = strtok(NULL, "=");
+
+        if (name && value) {
+            for (int i = 0; i < VariableCount; i++) {
+                if (strcmp(Variables[i].name, name) == 0) {
+                    strcpy(Variables[i].value, value);
+                    return;
+                }
+            }
+            strcpy(Variables[VariableCount].value, value);
+            strcpy(Variables[VariableCount].name, name);
+            VariableCount++;
         }
     }
 }
