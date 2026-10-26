@@ -75,6 +75,8 @@ void do_complete(char *argv[]);
 void do_jobs(char *argv[]);
 void do_history(char *argv[]);
 void do_declare(char *argv[]);
+char *lookup_shell_variable(char *name);
+void expand_variables(char *argv[]);
 
 /*
  * Checks current status of jobs
@@ -180,6 +182,8 @@ int main(void) {
             free(command_run);
             continue;
         }
+
+        expand_variables(arguments);
 
         bool has_pipe = false;
         for (int i = 1; i < arg_count; i++) {
@@ -433,6 +437,27 @@ void do_history(char *argv[]) {
     }
 }
 
+void expand_variables(char *argv[]) {
+    for (int i = 0; argv[i] != NULL; i++) {
+        if (argv[i][0] == '$') {
+            char *value = lookup_shell_variable(argv[i] + 1);
+
+            if (value != NULL) {
+                argv[i] = value;
+            }
+        }
+    }
+}
+
+char *lookup_shell_variable(char *name) {
+    for (int i = 0; i < VariableCount; i++) {
+        if (strcmp(Variables[i].name, name) == 0) {
+            return Variables[i].value;
+        }
+    }
+    return NULL;
+}
+
 void do_declare(char *argv[]) {
     if (argv[1] == NULL) {
         return;
@@ -440,14 +465,12 @@ void do_declare(char *argv[]) {
 
     if (strcmp(argv[1], "-p") == 0) {
         if (argv[2] != NULL) {
-            for (int i = 0; i < VariableCount; i++) {
-                if (strcmp(Variables[i].name, argv[2]) == 0) {
-                    printf("declare -- %s=\"%s\"\n", argv[2],
-                           Variables[i].value);
-                    return;
-                }
+            char *value = lookup_shell_variable(argv[2]);
+            if (value != NULL) {
+                printf("declare -- %s=\"%s\"\n", argv[2], value);
+            } else {
+                printf("declare: %s: not found\n", argv[2]);
             }
-            printf("declare: %s: not found\n", argv[2]);
         }
     } else {
         char *name = strtok(argv[1], "=");
