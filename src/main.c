@@ -186,6 +186,7 @@ int main(void) {
             continue;
         }
 
+        size_t input_len = strlen(command_run);
         expand_variables(arguments);
 
         bool has_pipe = false;
@@ -200,8 +201,7 @@ int main(void) {
             if (valid_pipeline(arguments)) {
                 run_pipeline(arguments);
             }
-            free_expanded_variables(arguments, arg_count, inputs,
-                                    strlen(command_run));
+            free_expanded_variables(arguments, arg_count, inputs, input_len);
             free(inputs);
             free(command_run);
             continue;
@@ -222,8 +222,7 @@ int main(void) {
             arguments[arg_count - 1] = NULL;
             run_external_program(arguments, true);
 
-            free_expanded_variables(arguments, arg_count, inputs,
-                                    strlen(command_run));
+            free_expanded_variables(arguments, arg_count, inputs, input_len);
             free(inputs);
             continue;
         }
@@ -242,8 +241,7 @@ int main(void) {
 
         if (idx == 0) {
             fprintf(stderr, "syntax error: expected command\n");
-            free_expanded_variables(arguments, arg_count, inputs,
-                                    strlen(command_run));
+            free_expanded_variables(arguments, arg_count, inputs, input_len);
             free(inputs);
             continue;
         }
@@ -254,7 +252,7 @@ int main(void) {
                 fprintf(stderr,
                         "syntax error near unexpected token `newline'\n");
                 free_expanded_variables(arguments, arg_count, inputs,
-                                        strlen(command_run));
+                                        input_len);
                 free(inputs);
                 continue;
             } else {
@@ -265,8 +263,7 @@ int main(void) {
             execute_command(arguments);
         }
 
-        free_expanded_variables(arguments, arg_count, inputs,
-                                strlen(command_run));
+        free_expanded_variables(arguments, arg_count, inputs, input_len);
 
         free(inputs);
         free(command_run);
