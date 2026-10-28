@@ -13,6 +13,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define MAX_ARG_LEN 4096
 #define MAX_ARGS 256
 #define MAX_CMD_LEN 1024
 #define MAX_COMPLETIONS 1024
@@ -77,6 +78,8 @@ void do_history(char *argv[]);
 void do_declare(char *argv[]);
 char *lookup_shell_variable(char *name);
 void expand_variables(char *argv[]);
+void free_expanded_variables(char *argv[], int argc, char *inputs,
+                             size_t input_len);
 
 /*
  * Checks current status of jobs
@@ -197,6 +200,8 @@ int main(void) {
             if (valid_pipeline(arguments)) {
                 run_pipeline(arguments);
             }
+            free_expanded_variables(arguments, arg_count, inputs,
+                                    strlen(command_run));
             free(inputs);
             free(command_run);
             continue;
@@ -217,6 +222,8 @@ int main(void) {
             arguments[arg_count - 1] = NULL;
             run_external_program(arguments, true);
 
+            free_expanded_variables(arguments, arg_count, inputs,
+                                    strlen(command_run));
             free(inputs);
             continue;
         }
@@ -235,6 +242,8 @@ int main(void) {
 
         if (idx == 0) {
             fprintf(stderr, "syntax error: expected command\n");
+            free_expanded_variables(arguments, arg_count, inputs,
+                                    strlen(command_run));
             free(inputs);
             continue;
         }
@@ -244,6 +253,8 @@ int main(void) {
                 // user didn't enter a file to redirect to
                 fprintf(stderr,
                         "syntax error near unexpected token `newline'\n");
+                free_expanded_variables(arguments, arg_count, inputs,
+                                        strlen(command_run));
                 free(inputs);
                 continue;
             } else {
@@ -253,6 +264,10 @@ int main(void) {
         } else {
             execute_command(arguments);
         }
+
+        free_expanded_variables(arguments, arg_count, inputs,
+                                strlen(command_run));
+
         free(inputs);
         free(command_run);
     }
@@ -439,13 +454,24 @@ void do_history(char *argv[]) {
 
 void expand_variables(char *argv[]) {
     for (int i = 0; argv[i] != NULL; i++) {
-        if (argv[i][0] == '$') {
-            char *value = lookup_shell_variable(argv[i] + 1);
-
-            if (value != NULL) {
-                argv[i] = value;
-            }
+        char *variable = strchr(argv[i], '$');
+        if (variable == NULL) {
+            continue;
         }
+        *variable = '\0';
+
+        char *variable_value = lookup_shell_variable(variable + 1);
+        if (variable_value == NULL) {
+            continue;
+        }
+
+        char *buffer = calloc(MAX_ARG_LEN, sizeof(char));
+
+        strncpy(buffer, argv[i], strlen(argv[i]));
+
+        strncat(buffer, variable_value, MAX_ARG_LEN - strlen(buffer) - 1);
+
+        argv[i] = buffer;
     }
 }
 
@@ -456,6 +482,15 @@ char *lookup_shell_variable(char *name) {
         }
     }
     return NULL;
+}
+
+void free_expanded_variables(char *argv[], int argc, char *inputs,
+                             size_t input_len) {
+    for (int i = 0; i < argc; i++) {
+        if (argv[i] < inputs || argv[i] > inputs + input_len) {
+            free(argv[i]);
+        }
+    }
 }
 
 void do_declare(char *argv[]) {
