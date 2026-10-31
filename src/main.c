@@ -77,6 +77,8 @@ void do_jobs(char *argv[]);
 void do_history(char *argv[]);
 void do_declare(char *argv[]);
 char *lookup_shell_variable(char *name);
+size_t var_name_len(char *s);
+bool has_var_ref(char *s);
 void expand_variables(char *argv[]);
 void free_expanded_variables(char *argv[], int argc, char *inputs,
                              size_t input_len);
@@ -449,25 +451,99 @@ void do_history(char *argv[]) {
     }
 }
 
-void expand_variables(char *argv[]) {
-    for (int i = 0; argv[i] != NULL; i++) {
-        char *variable = strchr(argv[i], '$');
-        if (variable == NULL) {
+size_t var_name_len(char *s) {
+    if (!(isalpha((unsigned char)s[0]) || s[0] == '_')) {
+        return 0;
+    }
+    size_t n = 1;
+    while (isalnum((unsigned char)s[n]) || s[n] == '_') {
+        n++;
+    }
+    return n;
+}
+
+bool has_var_ref(char *s) {
+    for (; *s != '\0'; s++) {
+        if (*s != '$') {
             continue;
         }
-        *variable = '\0';
+        if (s[1] == '{') {
+            size_t n = var_name_len(s + 2);
+            if (n > 0 && s[2 + n] == '}') {
+                return true;
+            }
+        } else if (var_name_len(s + 1) > 0) {
+            return true;
+        }
+    }
+    return false;
+}
 
-        char *variable_value = lookup_shell_variable(variable + 1);
-        if (variable_value == NULL) {
-            continue;
+void expand_variables(char *argv[]) {
+    for (int i = 0; argv[i] != NULL; i++) {
+        if (!has_var_ref(argv[i])) {
+            continue; // no allocation; token keeps pointing into inputs
         }
 
         char *buffer = calloc(MAX_ARG_LEN, sizeof(char));
+        if (buffer == NULL) {
+            perror("calloc");
+            continue;
+        }
 
-        strncpy(buffer, argv[i], strlen(argv[i]));
+        size_t out = 0;
+        char *p = argv[i];
 
-        strncat(buffer, variable_value, MAX_ARG_LEN - strlen(buffer) - 1);
+        while (*p != '\0' && out < MAX_ARG_LEN - 1) {
+            if (*p != '$') {
+                buffer[out++] = *p++;
+                continue;
+            }
 
+            char *name_start;
+            size_t name_len;
+            char *next;
+
+            if (p[1] == '{') {
+                name_start = p + 2;
+                name_len = var_name_len(name_start);
+                if (name_len > 0 && name_start[name_len] == '}') {
+                    next = name_start + name_len + 1;
+                } else {
+                    buffer[out++] = *p++; /* malformed: keep '$' literally */
+                    continue;
+                }
+            } else {
+                name_start = p + 1;
+                name_len = var_name_len(name_start);
+                if (name_len == 0) {
+                    buffer[out++] = *p++; /* lone '$' */
+                    continue;
+                }
+                next = name_start + name_len;
+            }
+
+            char name[1024];
+            size_t copy_len =
+                name_len < sizeof(name) ? name_len : sizeof(name) - 1;
+            memcpy(name, name_start, copy_len);
+            name[copy_len] = '\0';
+
+            char *value = lookup_shell_variable(name);
+            if (value != NULL) {
+                size_t vlen = strlen(value);
+                if (vlen > MAX_ARG_LEN - 1 - out) {
+                    vlen = MAX_ARG_LEN - 1 - out;
+                }
+                memcpy(buffer + out, value, vlen);
+                out += vlen;
+            }
+            /* unset variable expands to nothing */
+
+            p = next;
+        }
+
+        buffer[out] = '\0';
         argv[i] = buffer;
     }
 }
