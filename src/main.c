@@ -506,7 +506,57 @@ int expand_variables(char *argv[], int argc) {
         const char *p = token;
 
         while (*p != '\0' && out < MAX_ARG_LEN - 1) {
-            /* ... body of your existing while loop, unchanged ... */
+            if (*p != '$') {
+                buffer[out++] = *p++;
+                continue;
+            }
+
+            /* Work out whether this is ${name} or $name */
+            const char *name_start = NULL;
+            size_t n = 0;
+            size_t consumed = 0;
+
+            if (p[1] == '{') {
+                n = var_name_len((char *)p + 2);
+                if (n > 0 && p[2 + n] == '}') {
+                    name_start = p + 2;
+                    consumed = n + 3; /* ${ + name + } */
+                } else {
+                    n = 0;
+                }
+            } else {
+                n = var_name_len((char *)p + 1);
+                if (n > 0) {
+                    name_start = p + 1;
+                    consumed = n + 1; /* $ + name */
+                }
+            }
+
+            if (n == 0) {
+                /* Lone '$' or invalid reference: keep it literally */
+                buffer[out++] = *p++;
+                continue;
+            }
+
+            char name[1024];
+            if (n >= sizeof(name)) {
+                n = sizeof(name) - 1;
+            }
+            memcpy(name, name_start, n);
+            name[n] = '\0';
+
+            char *value = lookup_shell_variable(name);
+            if (value != NULL) {
+                size_t vlen = strlen(value);
+                if (vlen > MAX_ARG_LEN - 1 - out) {
+                    vlen = MAX_ARG_LEN - 1 - out;
+                }
+                memcpy(buffer + out, value, vlen);
+                out += vlen;
+            }
+            /* unset variable: append nothing */
+
+            p += consumed;
         }
         buffer[out] = '\0';
 
